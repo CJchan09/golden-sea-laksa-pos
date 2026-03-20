@@ -33,7 +33,8 @@ export default function KitchenDisplay() {
   const [, setTick] = useState(0);
   const prevCountRef = useRef(0);
 
-  const preparingOrders = orders.filter(o => o.status === 'Preparing');
+  // Show both Pending and Preparing orders — kitchen needs to see all active orders
+  const activeOrders = orders.filter(o => o.status === 'Pending' || o.status === 'Preparing');
 
   // Tick every second to update elapsed time
   useEffect(() => {
@@ -43,13 +44,13 @@ export default function KitchenDisplay() {
 
   // Play beep when new orders come in
   useEffect(() => {
-    if (preparingOrders.length > prevCountRef.current && prevCountRef.current > 0) {
+    if (activeOrders.length > prevCountRef.current && prevCountRef.current > 0) {
       playBeep();
     }
-    prevCountRef.current = preparingOrders.length;
-  }, [preparingOrders.length]);
+    prevCountRef.current = activeOrders.length;
+  }, [activeOrders.length]);
 
-  if (preparingOrders.length === 0) {
+  if (activeOrders.length === 0) {
     return (
       <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-8">
         <div className="w-32 h-32 bg-zinc-900 rounded-full flex items-center justify-center mb-8 border-2 border-zinc-800">
@@ -74,7 +75,7 @@ export default function KitchenDisplay() {
           <div>
             <h1 className="text-2xl font-extrabold text-white">Kitchen Display / 后厨看板</h1>
             <p className="text-zinc-500 text-sm font-medium">
-              {preparingOrders.length} order{preparingOrders.length > 1 ? 's' : ''} preparing / 制作中
+              {activeOrders.length} order{activeOrders.length > 1 ? 's' : ''} active / 进行中
             </p>
           </div>
         </div>
@@ -86,9 +87,10 @@ export default function KitchenDisplay() {
 
       {/* Orders Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 lg:gap-6">
-        {preparingOrders.map(order => {
+        {activeOrders.map(order => {
           const elapsed = getElapsedMinutes(order.timestamp);
           const isUrgent = elapsed >= 10;
+          const isPending = order.status === 'Pending';
 
           return (
             <div
@@ -96,7 +98,9 @@ export default function KitchenDisplay() {
               className={`bg-zinc-900 rounded-2xl border-2 overflow-hidden flex flex-col ${
                 isUrgent
                   ? 'border-red-500/60 shadow-lg shadow-red-500/10'
-                  : 'border-zinc-800'
+                  : isPending
+                    ? 'border-orange-500/50 shadow-lg shadow-orange-500/10'
+                    : 'border-zinc-800'
               }`}
             >
               {/* Order Header */}
@@ -110,6 +114,13 @@ export default function KitchenDisplay() {
                         : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
                     }`}>
                       {order.order_type === 'Dine-in' ? `🪑 Table ${order.table_no}` : '🛍️ Takeaway'}
+                    </span>
+                    <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase ${
+                      isPending
+                        ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                        : 'bg-green-500/20 text-green-400 border border-green-500/30'
+                    }`}>
+                      {isPending ? '⏳ 未付款 Unpaid' : '✅ 已付款 Paid'}
                     </span>
                   </div>
                 </div>
