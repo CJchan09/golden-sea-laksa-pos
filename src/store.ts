@@ -196,8 +196,8 @@ export function useStore() {
   };
 
   // ---- Submit Order ----
-  const submitOrder = async (orderType: 'Dine-in' | 'Takeaway', tableNo?: string) => {
-    if (cart.length === 0) return;
+  const submitOrder = async (orderType: 'Dine-in' | 'Takeaway', tableNo?: string): Promise<string | null> => {
+    if (cart.length === 0) return null;
 
     const totalQty = cart.reduce((sum, item) => sum + item.quantity, 0);
     const totalAmount = cart.reduce((sum, item) => sum + item.totalPrice, 0);
@@ -237,6 +237,8 @@ export function useStore() {
       );
       saveOrders(syncedOrders);
     }
+
+    return newOrder.local_order_id;
   };
 
   // ---- Mark as Paid ----

@@ -25,23 +25,14 @@ export default function CashierRegister() {
   };
 
   const handlePayment = async (method: PaymentMethod) => {
-    await submitOrder(orderType, tableNo);
-    // Get the most recent order (just submitted) and mark it as paid immediately
-    const latestOrderId = orders.length > 0 ? null : null; // we'll mark after submit
+    const newOrderId = await submitOrder(orderType, tableNo);
     setShowPaymentModal(false);
     setTableNo('');
     
-    // Mark the newly created order as paid — we need to get it from updated state
-    // Since submitOrder updates state, we use a timeout to ensure we get the latest
-    setTimeout(() => {
-      const storedOrders = localStorage.getItem('golden_sea_laksa_orders');
-      if (storedOrders) {
-        const allOrders = JSON.parse(storedOrders);
-        if (allOrders.length > 0) {
-          markAsPaid(allOrders[0].local_order_id, method);
-        }
-      }
-    }, 50);
+    // Mark the newly created order as paid immediately
+    if (newOrderId) {
+      markAsPaid(newOrderId, method);
+    }
   };
 
   return (
