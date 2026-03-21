@@ -10,6 +10,7 @@ import CustomerCheckout from './components/CustomerCheckout';
 import CashierLayout from './components/CashierLayout';
 import KitchenDisplay from './components/KitchenDisplay';
 import AdminLogin from './components/AdminLogin';
+import { StoreProvider } from './store';
 
 type Route = 'landing' | 'order' | 'cashier' | 'kitchen';
 
@@ -56,9 +57,11 @@ export default function App() {
       return <AdminLogin onLogin={handleAdminLogin} />;
     }
     return (
-      <div className="min-h-screen bg-gray-100 dark:bg-zinc-950 font-display text-slate-900 dark:text-slate-100">
-        <CashierLayout onLogout={handleAdminLogout} />
-      </div>
+      <StoreProvider>
+        <div className="min-h-screen bg-gray-100 dark:bg-zinc-950 font-display text-slate-900 dark:text-slate-100">
+          <CashierLayout onLogout={handleAdminLogout} />
+        </div>
+      </StoreProvider>
     );
   }
 
@@ -68,41 +71,45 @@ export default function App() {
       return <AdminLogin onLogin={handleAdminLogin} />;
     }
     return (
-      <div className="min-h-screen bg-zinc-950 font-display text-slate-100">
-        <KitchenDisplay />
-      </div>
+      <StoreProvider>
+        <div className="min-h-screen bg-zinc-950 font-display text-slate-100">
+          <KitchenDisplay />
+        </div>
+      </StoreProvider>
     );
   }
 
   // Mobile-friendly customer/order flow — NO login required
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-zinc-950 font-display text-slate-900 dark:text-slate-100 flex justify-center">
-      <div className="w-full max-w-md bg-background-light dark:bg-background-dark min-h-screen shadow-2xl relative overflow-hidden">
-        {route === 'landing' && (
-          <LandingPage
-            onStart={() => {
-              window.location.hash = '#/order';
-              setOrderSubView('home');
-            }}
-            onAdmin={() => {
-              window.location.hash = '#/cashier';
-            }}
-          />
-        )}
+    <StoreProvider>
+      <div className="min-h-screen bg-gray-100 dark:bg-zinc-950 font-display text-slate-900 dark:text-slate-100 flex justify-center">
+        <div className="w-full max-w-md bg-background-light dark:bg-background-dark min-h-screen shadow-2xl relative overflow-hidden">
+          {route === 'landing' && (
+            <LandingPage
+              onStart={() => {
+                window.location.hash = '#/order';
+                setOrderSubView('home');
+              }}
+              onAdmin={() => {
+                window.location.hash = '#/cashier';
+              }}
+            />
+          )}
 
-        {route === 'order' && orderSubView === 'home' && (
-          <CustomerHome
-            onBack={() => { window.location.hash = ''; }}
-            onCheckout={() => setOrderSubView('checkout')}
-          />
-        )}
+          {route === 'order' && orderSubView === 'home' && (
+            <CustomerHome
+              onBack={() => { window.location.hash = ''; }}
+              onCheckout={() => setOrderSubView('checkout')}
+            />
+          )}
 
-        {route === 'order' && orderSubView === 'checkout' && (
-          <CustomerCheckout
-            onBack={() => setOrderSubView('home')}
-          />
-        )}
+          {route === 'order' && orderSubView === 'checkout' && (
+            <CustomerCheckout
+              onBack={() => setOrderSubView('home')}
+            />
+          )}
+        </div>
       </div>
-    </div>
+    </StoreProvider>
   );
 }

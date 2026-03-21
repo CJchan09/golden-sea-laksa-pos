@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { Order, CartItem, Language, PaymentMethod, SalesStats } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
@@ -9,7 +9,7 @@ const CART_KEY = 'golden_sea_laksa_cart';
 const LANG_KEY = 'golden_sea_laksa_lang';
 const POLL_INTERVAL = 5000; // 5 seconds
 
-// BroadcastChannel for same-browser cross-tab sync
+// BroadcastChannel for cross-tab sync (different browser tabs)
 const channel = typeof BroadcastChannel !== 'undefined'
   ? new BroadcastChannel('golden_sea_laksa_sync')
   : null;
@@ -20,7 +20,7 @@ async function gasPost(data: Record<string, any>): Promise<any> {
   try {
     const res = await fetch(GAS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain' }, // text/plain avoids CORS preflight
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(data),
     });
     return await res.json();
@@ -43,14 +43,36 @@ async function gasGet(params: Record<string, string>): Promise<any> {
   }
 }
 
-// ==================== Main Store Hook ====================
-export function useStore() {
+// ==================== Store Types ====================
+interface StoreState {
+  orders: Order[];
+  cart: CartItem[];
+  language: Language;
+  isOnline: boolean;
+  isSyncing: boolean;
+  changeLanguage: (lang: Language) => void;
+  addToCart: (item: Omit<CartItem, 'id'>) => void;
+  removeFromCart: (id: string) => void;
+  clearCart: () => void;
+  submitOrder: (orderType: 'Dine-in' | 'Takeaway', tableNo?: string) => Promise<string | null>;
+  markAsPaid: (localOrderId: string, paymentMethod: PaymentMethod) => void;
+  updateOrderStatus: (localOrderId: string, status: 'Preparing' | 'Completed' | 'Cancelled') => void;
+  fetchStats: (from: string, to: string) => Promise<SalesStats | null>;
+}
+
+// ==================== React Context ====================
+const StoreContext = createContext<StoreState | null>(null);
+
+export function StoreProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [language, setLanguage] = useState<Language>('en');
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Keep a ref to orders so async functions always have the latest
+  const ordersRef = useRef<Order[]>(orders);
+  ordersRef.current = orders;
 
   // ---- Load initial state ----
   useEffect(() => {
@@ -68,7 +90,7 @@ export function useStore() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // BroadcastChannel listener
+    // BroadcastChannel listener (for cross-tab sync)
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'orders_updated') {
         setOrders(event.data.orders);
@@ -94,21 +116,18 @@ export function useStore() {
         if (result?.success && result.orders) {
           const remoteOrders: Order[] = result.orders.map((o: any) => ({
             ...o,
-            items: [], // Remote orders don't store full item detail, use summary
+            items: [],
             paid: !!o.paid,
             synced: true,
           }));
 
-          // Merge: remote orders take priority on status, local unsync'd orders preserved
           setOrders(prev => {
             const localUnsyncedIds = new Set(
               prev.filter(o => !o.synced).map(o => o.local_order_id)
             );
             
-            // Start with remote orders
             const merged = [...remoteOrders];
             
-            // Add local unsynced orders that don't exist remotely
             prev.forEach(o => {
               if (localUnsyncedIds.has(o.local_order_id) &&
                   !remoteOrders.find(r => r.local_order_id === o.local_order_id)) {
@@ -116,7 +135,6 @@ export function useStore() {
               }
             });
 
-            // Keep local items data if available
             const mergedWithItems = merged.map(m => {
               const local = prev.find(p => p.local_order_id === m.local_order_id);
               if (local && local.items && local.items.length > 0) {
@@ -125,7 +143,6 @@ export function useStore() {
               return m;
             });
 
-            // Sort by timestamp descending
             mergedWithItems.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
             
             localStorage.setItem(ORDERS_KEY, JSON.stringify(mergedWithItems));
@@ -133,14 +150,11 @@ export function useStore() {
           });
         }
       } catch (e) {
-        // Polling failure is silent — we keep local data
+        // Polling failure is silent
       }
     };
 
-    // Initial poll
     pollOrders();
-
-    // Start interval
     pollRef.current = setInterval(pollOrders, POLL_INTERVAL);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
@@ -159,28 +173,37 @@ export function useStore() {
     broadcastOrders(newOrders);
   }, [broadcastOrders]);
 
-  const saveCart = (newCart: CartItem[]) => {
+  const saveCart = useCallback((newCart: CartItem[]) => {
     setCart(newCart);
     localStorage.setItem(CART_KEY, JSON.stringify(newCart));
-  };
+  }, []);
 
-  const changeLanguage = (lang: Language) => {
+  const changeLanguage = useCallback((lang: Language) => {
     setLanguage(lang);
     localStorage.setItem(LANG_KEY, lang);
-  };
+  }, []);
 
-  const addToCart = (item: Omit<CartItem, 'id'>) => {
+  const addToCart = useCallback((item: Omit<CartItem, 'id'>) => {
     const newItem = { ...item, id: uuidv4() };
-    saveCart([...cart, newItem]);
-  };
+    setCart(prev => {
+      const updated = [...prev, newItem];
+      localStorage.setItem(CART_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
 
-  const removeFromCart = (id: string) => {
-    saveCart(cart.filter(item => item.id !== id));
-  };
+  const removeFromCart = useCallback((id: string) => {
+    setCart(prev => {
+      const updated = prev.filter(item => item.id !== id);
+      localStorage.setItem(CART_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
 
-  const clearCart = () => {
-    saveCart([]);
-  };
+  const clearCart = useCallback(() => {
+    setCart([]);
+    localStorage.setItem(CART_KEY, JSON.stringify([]));
+  }, []);
 
   const generateItemsSummary = (items: CartItem[], lang: Language): string => {
     return items.map(item => {
@@ -196,14 +219,17 @@ export function useStore() {
   };
 
   // ---- Submit Order ----
-  const submitOrder = async (orderType: 'Dine-in' | 'Takeaway', tableNo?: string): Promise<string | null> => {
-    if (cart.length === 0) return null;
+  const submitOrder = useCallback(async (orderType: 'Dine-in' | 'Takeaway', tableNo?: string): Promise<string | null> => {
+    // Read current cart from state ref
+    const currentCart = cart;
+    if (currentCart.length === 0) return null;
 
-    const totalQty = cart.reduce((sum, item) => sum + item.quantity, 0);
-    const totalAmount = cart.reduce((sum, item) => sum + item.totalPrice, 0);
-    const itemsSummary = generateItemsSummary(cart, language);
+    const totalQty = currentCart.reduce((sum, item) => sum + item.quantity, 0);
+    const totalAmount = currentCart.reduce((sum, item) => sum + item.totalPrice, 0);
+    const itemsSummary = generateItemsSummary(currentCart, language);
     
-    const todayCount = orders.filter(o => o.timestamp.startsWith(format(new Date(), 'yyyy-MM-dd'))).length;
+    const currentOrders = ordersRef.current;
+    const todayCount = currentOrders.filter(o => o.timestamp.startsWith(format(new Date(), 'yyyy-MM-dd'))).length;
     const orderId = `JH-${2000 + todayCount + 1}`;
 
     const newOrder: Order = {
@@ -213,7 +239,7 @@ export function useStore() {
       order_type: orderType,
       table_no: tableNo,
       items_summary: itemsSummary,
-      items: [...cart],
+      items: [...currentCart],
       total_qty: totalQty,
       total_amount: totalAmount,
       status: 'Pending',
@@ -221,68 +247,84 @@ export function useStore() {
       synced: false
     };
 
-    const updatedOrders = [newOrder, ...orders];
+    const updatedOrders = [newOrder, ...currentOrders];
     saveOrders(updatedOrders);
-    clearCart();
+    
+    // Clear cart
+    setCart([]);
+    localStorage.setItem(CART_KEY, JSON.stringify([]));
 
     // Sync to Google Sheet
     const result = await gasPost({
       action: 'addOrder',
       ...newOrder,
-      items: undefined, // Don't send full cart items to GAS
+      items: undefined,
     });
     if (result?.success) {
-      const syncedOrders = updatedOrders.map(o =>
-        o.local_order_id === newOrder.local_order_id ? { ...o, synced: true } : o
-      );
-      saveOrders(syncedOrders);
+      // Use functional update to ensure latest state
+      setOrders(prev => {
+        const synced = prev.map(o =>
+          o.local_order_id === newOrder.local_order_id ? { ...o, synced: true } : o
+        );
+        localStorage.setItem(ORDERS_KEY, JSON.stringify(synced));
+        broadcastOrders(synced);
+        return synced;
+      });
     }
 
     return newOrder.local_order_id;
-  };
+  }, [cart, language, saveOrders, broadcastOrders]);
 
   // ---- Mark as Paid ----
-  const markAsPaid = async (localOrderId: string, paymentMethod: PaymentMethod) => {
-    const updatedOrders = orders.map(o =>
-      o.local_order_id === localOrderId
-        ? { ...o, paid: true, payment_method: paymentMethod, status: 'Preparing' as const }
-        : o
-    );
-    saveOrders(updatedOrders);
+  const markAsPaid = useCallback((localOrderId: string, paymentMethod: PaymentMethod) => {
+    setOrders(prev => {
+      const updated = prev.map(o =>
+        o.local_order_id === localOrderId
+          ? { ...o, paid: true, payment_method: paymentMethod, status: 'Preparing' as const }
+          : o
+      );
+      localStorage.setItem(ORDERS_KEY, JSON.stringify(updated));
+      broadcastOrders(updated);
+      return updated;
+    });
 
-    await gasPost({
+    gasPost({
       action: 'updateStatus',
       local_order_id: localOrderId,
       status: 'Preparing',
       paid: true,
       payment_method: paymentMethod,
     });
-  };
+  }, [broadcastOrders]);
 
   // ---- Update Order Status ----
-  const updateOrderStatus = async (localOrderId: string, status: 'Preparing' | 'Completed' | 'Cancelled') => {
-    const updatedOrders = orders.map(o =>
-      o.local_order_id === localOrderId ? { ...o, status } : o
-    );
-    saveOrders(updatedOrders);
+  const updateOrderStatus = useCallback((localOrderId: string, status: 'Preparing' | 'Completed' | 'Cancelled') => {
+    setOrders(prev => {
+      const updated = prev.map(o =>
+        o.local_order_id === localOrderId ? { ...o, status } : o
+      );
+      localStorage.setItem(ORDERS_KEY, JSON.stringify(updated));
+      broadcastOrders(updated);
+      return updated;
+    });
 
-    await gasPost({
+    gasPost({
       action: 'updateStatus',
       local_order_id: localOrderId,
       status,
     });
-  };
+  }, [broadcastOrders]);
 
   // ---- Fetch Sales Stats from GAS ----
-  const fetchStats = async (from: string, to: string): Promise<SalesStats | null> => {
+  const fetchStats = useCallback(async (from: string, to: string): Promise<SalesStats | null> => {
     const result = await gasGet({ action: 'getStats', from, to });
     if (result?.success) {
       return { totals: result.totals, daily: result.daily };
     }
     return null;
-  };
+  }, []);
 
-  return {
+  const value: StoreState = {
     orders,
     cart,
     language,
@@ -297,4 +339,17 @@ export function useStore() {
     updateOrderStatus,
     fetchStats,
   };
+
+  return (
+    <StoreContext.Provider value={value}>
+      {children}
+    </StoreContext.Provider>
+  );
+}
+
+// ==================== Hook ====================
+export function useStore(): StoreState {
+  const ctx = useContext(StoreContext);
+  if (!ctx) throw new Error('useStore must be used within <StoreProvider>');
+  return ctx;
 }
