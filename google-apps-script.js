@@ -6,20 +6,17 @@
  * 使用指南 / Setup Guide:
  * 
  * 1. 打开 Google Drive → 新建 Google Sheet → 命名为 "Golden Sea Laksa POS"
- * 2. 确保 Sheet 有一个名为 "Orders" 的工作表（默认 Sheet1 改名即可）
- * 3. 在 Orders 表第一行添加以下表头：
- *    A: order_id | B: local_order_id | C: timestamp | D: order_type | E: table_no
- *    F: items_summary | G: total_qty | H: total_amount | I: status
- *    J: paid | K: payment_method | L: synced_at
+ * 2. 不需要手动创建工作表！脚本会自动按月份创建，例如：
+ *    - Orders-2026-03 (三月的订单)
+ *    - Orders-2026-04 (四月的订单)
  * 
- * 4. 点击菜单 Extensions → Apps Script
- * 5. 删除默认的 myFunction 代码，粘贴本文件所有内容
- * 6. 点击 Deploy → New deployment → 选 "Web app"
+ * 3. 点击菜单 Extensions → Apps Script
+ * 4. 删除默认的 myFunction 代码，粘贴本文件所有内容
+ * 5. 点击 Deploy → New deployment → 选 "Web app"
  *    - Execute as: Me
  *    - Who has access: Anyone
- * 7. 点击 Deploy → 复制 Web App URL
- * 8. 将 URL 粘贴到项目中的 .env.local 文件：
- *    VITE_GAS_URL=https://script.google.com/macros/s/YOUR_ID/exec
+ * 6. 点击 Deploy → 复制 Web App URL
+ * 7. 将 URL 粘贴到 GitHub Secrets 的 VITE_GAS_URL
  * 
  * =====================================================
  */
@@ -66,7 +63,9 @@ function doGet(e) {
 
 // ==================== Add New Order ====================
 function addOrder(data) {
-  var sheet = getOrdersSheet();
+  // Get the month from the order timestamp (e.g., "2026-03")
+  var orderMonth = getMonthFromTimestamp(data.timestamp);
+  var sheet = getMonthlySheet(orderMonth);
   
   // Check if order already exists (avoid duplicates)
   var existingRow = findOrderRow(sheet, data.local_order_id);
@@ -89,16 +88,22 @@ function addOrder(data) {
     new Date().toISOString()
   ]);
   
-  return jsonResponse({ success: true, message: 'Order added' });
+  return jsonResponse({ success: true, message: 'Order added to ' + sheet.getName() });
 }
 
 // ==================== Update Order Status ====================
 function updateOrderStatus(data) {
-  var sheet = getOrdersSheet();
+  // We need to find which month sheet has this order
+  var sheet = findOrderSheet(data.local_order_id);
+  
+  if (!sheet) {
+    return jsonResponse({ success: false, error: 'Order not found: ' + data.local_order_id });
+  }
+  
   var row = findOrderRow(sheet, data.local_order_id);
   
   if (row <= 0) {
-    return jsonResponse({ success: false, error: 'Order not found: ' + data.local_order_id });
+    return jsonResponse({ success: false, error: 'Order row not found: ' + data.local_order_id });
   }
   
   // Update status (column I = 9)
@@ -116,12 +121,14 @@ function updateOrderStatus(data) {
   // Update synced_at (column L = 12)
   sheet.getRange(row, 12).setValue(new Date().toISOString());
   
-  return jsonResponse({ success: true, message: 'Order updated' });
+  return jsonResponse({ success: true, message: 'Order updated in ' + sheet.getName() });
 }
 
 // ==================== Get Orders by Date ====================
 function getOrders(date) {
-  var sheet = getOrdersSheet();
+  // date = "2026-03-21", month = "2026-03"
+  var month = date.substring(0, 7);
+  var sheet = getMonthlySheet(month);
   var data = sheet.getDataRange().getValues();
   var orders = [];
   
@@ -153,31 +160,48 @@ function getOrders(date) {
 
 // ==================== Get Stats (Date Range) ====================
 function getStats(from, to) {
-  var sheet = getOrdersSheet();
-  var data = sheet.getDataRange().getValues();
-  var dailyStats = {};
+  // Determine which month sheets to query
+  var fromMonth = from ? from.substring(0, 7) : getTodayString().substring(0, 7);
+  var toMonth = to ? to.substring(0, 7) : getTodayString().substring(0, 7);
   
-  for (var i = 1; i < data.length; i++) {
-    var row = data[i];
-    var timestamp = String(row[2]);
-    var date = timestamp.substring(0, 10); // YYYY-MM-DD
-    var status = String(row[8]);
+  var dailyStats = {};
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  
+  // Loop through all "Orders-YYYY-MM" sheets in range
+  for (var s = 0; s < sheets.length; s++) {
+    var sheetName = sheets[s].getName();
     
-    // Skip cancelled orders
-    if (status === 'Cancelled') continue;
+    // Only process Orders sheets
+    if (!sheetName.startsWith('Orders')) continue;
     
-    // Filter by date range
-    if (from && date < from) continue;
-    if (to && date > to) continue;
+    // Check if this month sheet is in our date range
+    var sheetMonth = sheetName.replace('Orders-', '').replace('Orders', getTodayString().substring(0, 7));
+    if (sheetMonth < fromMonth || sheetMonth > toMonth) continue;
     
-    if (!dailyStats[date]) {
-      dailyStats[date] = { date: date, bowls: 0, revenue: 0, orders: 0 };
+    var data = sheets[s].getDataRange().getValues();
+    
+    for (var i = 1; i < data.length; i++) {
+      var row = data[i];
+      var timestamp = String(row[2]);
+      var date = timestamp.substring(0, 10); // YYYY-MM-DD
+      var status = String(row[8]);
+      
+      // Skip cancelled orders
+      if (status === 'Cancelled') continue;
+      
+      // Filter by date range
+      if (from && date < from) continue;
+      if (to && date > to) continue;
+      
+      if (!dailyStats[date]) {
+        dailyStats[date] = { date: date, bowls: 0, revenue: 0, orders: 0 };
+      }
+      
+      dailyStats[date].bowls += Number(row[6]) || 0;
+      dailyStats[date].revenue += Number(row[7]) || 0;
+      dailyStats[date].orders += 1;
     }
-    
-    // Only count completed/preparing/pending (not cancelled)
-    dailyStats[date].bowls += Number(row[6]) || 0;
-    dailyStats[date].revenue += Number(row[7]) || 0;
-    dailyStats[date].orders += 1;
   }
   
   // Convert to array sorted by date
@@ -200,18 +224,54 @@ function getStats(from, to) {
 }
 
 // ==================== Helpers ====================
-function getOrdersSheet() {
+
+/**
+ * Get or create a monthly sheet like "Orders-2026-03"
+ */
+function getMonthlySheet(yearMonth) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('Orders');
+  var sheetName = 'Orders-' + yearMonth; // e.g., "Orders-2026-03"
+  var sheet = ss.getSheetByName(sheetName);
+  
   if (!sheet) {
-    sheet = ss.insertSheet('Orders');
+    sheet = ss.insertSheet(sheetName);
+    // Add headers
     sheet.appendRow([
       'order_id', 'local_order_id', 'timestamp', 'order_type', 'table_no',
       'items_summary', 'total_qty', 'total_amount', 'status',
       'paid', 'payment_method', 'synced_at'
     ]);
+    // Bold header row
+    sheet.getRange(1, 1, 1, 12).setFontWeight('bold');
   }
+  
   return sheet;
+}
+
+/**
+ * Extract "YYYY-MM" from a timestamp like "2026-03-21 18:30:00"
+ */
+function getMonthFromTimestamp(timestamp) {
+  if (!timestamp) return getTodayString().substring(0, 7);
+  return String(timestamp).substring(0, 7);
+}
+
+/**
+ * Find which sheet contains a given order (search all Orders sheets)
+ */
+function findOrderSheet(localOrderId) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  
+  for (var s = 0; s < sheets.length; s++) {
+    var sheetName = sheets[s].getName();
+    if (!sheetName.startsWith('Orders')) continue;
+    
+    var row = findOrderRow(sheets[s], localOrderId);
+    if (row > 0) return sheets[s];
+  }
+  
+  return null;
 }
 
 function findOrderRow(sheet, localOrderId) {

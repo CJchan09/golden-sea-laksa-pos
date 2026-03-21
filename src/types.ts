@@ -41,7 +41,7 @@ export interface CartItem {
 
 export type OrderType = 'Dine-in' | 'Takeaway';
 export type OrderStatus = 'Pending' | 'Preparing' | 'Completed' | 'Cancelled';
-export type PaymentMethod = 'Cash' | 'WeChat' | 'Alipay' | 'Other';
+export type PaymentMethod = 'Cash' | 'QR Pay';
 
 export interface Order {
   local_order_id: string;

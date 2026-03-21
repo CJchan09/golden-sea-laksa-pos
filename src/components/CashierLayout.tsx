@@ -1,10 +1,17 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
-import { LogOut, Store, Clock, History, Wifi, WifiOff } from 'lucide-react';
+import { LogOut, Store, Clock, History, Wifi, WifiOff, Lock, Eye, EyeOff } from 'lucide-react';
 import CashierRegister from './CashierRegister';
 import CashierActive from './CashierActive';
 import CashierHistory from './CashierHistory';
 import { format } from 'date-fns';
+
+const PASSWORD_KEY = 'golden_sea_laksa_admin_pw';
+const DEFAULT_PASSWORD = 'admin123';
+
+function getAdminPassword(): string {
+  return localStorage.getItem(PASSWORD_KEY) || DEFAULT_PASSWORD;
+}
 
 interface Props {
   onLogout: () => void;
@@ -13,6 +20,61 @@ interface Props {
 export default function CashierLayout({ onLogout }: Props) {
   const { isOnline } = useStore();
   const [activeTab, setActiveTab] = useState<'register' | 'active' | 'history'>('register');
+  // History password gate
+  const [historyUnlocked, setHistoryUnlocked] = useState(false);
+  const [historyPw, setHistoryPw] = useState('');
+  const [historyPwError, setHistoryPwError] = useState('');
+  const [showPw, setShowPw] = useState(false);
+
+  const handleHistoryLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (historyPw === getAdminPassword()) {
+      setHistoryUnlocked(true);
+      setHistoryPwError('');
+    } else {
+      setHistoryPwError('密码错误 / Wrong password');
+    }
+  };
+
+  // History Password Gate component
+  const HistoryPasswordGate = () => (
+    <div className="flex flex-col items-center justify-center py-16 px-4">
+      <div className="w-16 h-16 bg-orange-100 dark:bg-orange-900/30 rounded-2xl flex items-center justify-center mb-6">
+        <Lock className="w-8 h-8 text-orange-600 dark:text-orange-400" />
+      </div>
+      <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">History Locked</h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">历史记录需要密码查看</p>
+      
+      <form onSubmit={handleHistoryLogin} className="w-full max-w-xs space-y-3">
+        <div className="relative">
+          <input
+            type={showPw ? 'text' : 'password'}
+            value={historyPw}
+            onChange={e => { setHistoryPw(e.target.value); setHistoryPwError(''); }}
+            placeholder="Enter password / 输入密码"
+            className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 pr-12 py-3 text-gray-900 dark:text-white font-medium focus:ring-2 focus:ring-orange-500 outline-none"
+            autoFocus
+          />
+          <button
+            type="button"
+            onClick={() => setShowPw(!showPw)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+          >
+            {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+        {historyPwError && (
+          <p className="text-red-500 text-sm font-medium text-center">⚠️ {historyPwError}</p>
+        )}
+        <button
+          type="submit"
+          className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl transition-colors"
+        >
+          Unlock / 解锁
+        </button>
+      </form>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 flex flex-col">
@@ -58,7 +120,9 @@ export default function CashierLayout({ onLogout }: Props) {
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 pb-24">
         {activeTab === 'register' && <CashierRegister />}
         {activeTab === 'active' && <CashierActive />}
-        {activeTab === 'history' && <CashierHistory />}
+        {activeTab === 'history' && (
+          historyUnlocked ? <CashierHistory /> : <HistoryPasswordGate />
+        )}
       </main>
 
       {/* Bottom Navigation */}

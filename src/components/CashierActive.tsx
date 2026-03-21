@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useStore } from '../store';
 import { formatCurrency } from '../utils';
 import { MENU_ITEMS, SIZES, NOODLE_BASES, ADD_ONS } from '../constants';
-import { CheckCircle, XCircle, Clock, CreditCard, Banknote, X } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, CreditCard, Banknote, X, QrCode } from 'lucide-react';
 import { PaymentMethod } from '../types';
 
 export default function CashierActive() {
@@ -199,24 +199,11 @@ export default function CashierActive() {
                 Cash / 现金
               </button>
               <button
-                onClick={() => handlePayment(payingOrderId, 'WeChat')}
-                className="w-full py-4 bg-[#07C160] hover:bg-[#06AD56] text-white font-bold rounded-xl flex items-center justify-center gap-3 transition-colors text-lg"
+                onClick={() => handlePayment(payingOrderId, 'QR Pay')}
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-3 transition-colors text-lg"
               >
-                <span className="text-xl">💬</span>
-                WeChat Pay / 微信支付
-              </button>
-              <button
-                onClick={() => handlePayment(payingOrderId, 'Alipay')}
-                className="w-full py-4 bg-[#1677FF] hover:bg-[#0958D9] text-white font-bold rounded-xl flex items-center justify-center gap-3 transition-colors text-lg"
-              >
-                <span className="text-xl">🅰️</span>
-                Alipay / 支付宝
-              </button>
-              <button
-                onClick={() => handlePayment(payingOrderId, 'Other')}
-                className="w-full py-3 bg-gray-200 dark:bg-zinc-800 hover:bg-gray-300 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-300 font-bold rounded-xl flex items-center justify-center gap-3 transition-colors"
-              >
-                Other / 其他
+                <QrCode className="w-6 h-6" />
+                QR Pay / 扫码支付
               </button>
             </div>
           </div>

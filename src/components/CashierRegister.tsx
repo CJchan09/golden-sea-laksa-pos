@@ -4,7 +4,7 @@ import { MENU_ITEMS } from '../constants';
 import { MenuItem, OrderType, PaymentMethod } from '../types';
 import { formatCurrency } from '../utils';
 import CustomizationModal from './CustomizationModal';
-import { ShoppingCart, Trash2, CreditCard, Banknote, X } from 'lucide-react';
+import { ShoppingCart, Trash2, CreditCard, Banknote, X, QrCode } from 'lucide-react';
 
 export default function CashierRegister() {
   const { language, cart, addToCart, removeFromCart, clearCart, submitOrder, markAsPaid, orders } = useStore();
@@ -190,25 +190,22 @@ export default function CashierRegister() {
                 Cash / 现金
               </button>
               <button
-                onClick={() => handlePayment('WeChat')}
-                className="w-full py-4 bg-[#07C160] hover:bg-[#06AD56] text-white font-bold rounded-xl flex items-center justify-center gap-3 transition-colors text-lg"
+                onClick={() => handlePayment('QR Pay')}
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-3 transition-colors text-lg"
               >
-                <span className="text-xl">💬</span>
-                WeChat Pay / 微信支付
+                <QrCode className="w-6 h-6" />
+                QR Pay / 扫码支付
               </button>
-              <button
-                onClick={() => handlePayment('Alipay')}
-                className="w-full py-4 bg-[#1677FF] hover:bg-[#0958D9] text-white font-bold rounded-xl flex items-center justify-center gap-3 transition-colors text-lg"
-              >
-                <span className="text-xl">🅰️</span>
-                Alipay / 支付宝
-              </button>
-              <button
-                onClick={() => handlePayment('Other')}
-                className="w-full py-3 bg-gray-200 dark:bg-zinc-800 hover:bg-gray-300 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-300 font-bold rounded-xl flex items-center justify-center gap-3 transition-colors"
-              >
-                Other / 其他
-              </button>
+              {/* Show uploaded QR image if available */}
+              {(() => {
+                const qrImg = localStorage.getItem('golden_sea_laksa_qr_image');
+                return qrImg ? (
+                  <div className="mt-2 p-3 bg-white rounded-xl border border-gray-200 dark:border-zinc-700">
+                    <p className="text-xs text-center text-gray-500 dark:text-gray-400 mb-2 font-medium">QR Code / 二维码</p>
+                    <img src={qrImg} alt="QR Payment" className="w-full max-h-48 object-contain mx-auto rounded-lg" />
+                  </div>
+                ) : null;
+              })()}
             </div>
           </div>
         </div>
