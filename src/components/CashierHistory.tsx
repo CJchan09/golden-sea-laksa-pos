@@ -71,9 +71,7 @@ export default function CashierHistory() {
   const paymentMethodLabel = (method?: string) => {
     switch (method) {
       case 'Cash': return '💵 Cash';
-      case 'WeChat': return '💬 WeChat';
-      case 'Alipay': return '🅰️ Alipay';
-      case 'Other': return '💳 Other';
+      case 'QR Pay': return '📱 QR Pay';
       default: return '—';
     }
   };

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
-import { MENU_ITEMS } from '../constants';
 import { MenuItem } from '../types';
 import { formatCurrency } from '../utils';
 import { ArrowLeft, Plus, Globe, ReceiptText, UtensilsCrossed } from 'lucide-react';
@@ -12,7 +11,7 @@ interface Props {
 }
 
 export default function CustomerHome({ onBack, onCheckout }: Props) {
-  const { language, changeLanguage } = useStore();
+  const { language, changeLanguage, settings } = useStore();
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const { addToCart } = useStore();
 
@@ -29,7 +28,7 @@ export default function CustomerHome({ onBack, onCheckout }: Props) {
             <ArrowLeft className="w-6 h-6" />
           </button>
           <h1 className="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight flex-1 text-center pr-10">
-            Golden Sea Laksa (金海叻沙)
+            {settings.shopNameEn} ({settings.shopNameZh})
           </h1>
         </div>
       </header>
@@ -40,7 +39,7 @@ export default function CustomerHome({ onBack, onCheckout }: Props) {
         <div className="px-4 py-4">
           <div 
             className="w-full bg-center bg-no-repeat bg-cover flex flex-col justify-end overflow-hidden rounded-xl min-h-[220px] shadow-sm"
-            style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuBLpY31sWcld75ZaPcZdrr5IY6qNh-odw0y5V6bmD9FQcBX0q-CCQc-p_rrV6LwJh4Cep-vT3H1uBEybd_Wue0BT2TCgvBEM8JU1MxZNJAHfWFLdQeteCqwxWtGeiYG63E6CnGuKBrSG6pfitXeXeBXONtNJLYMLZmr1WkYob-uOuiV0Nj9OJhL1eIivvwq28VZrujyFZPRqP1NUT8rlvqQWq0OhFXl0dsMPDwx9HkRLd7mYlb-hUWV9WwHFxwEuvogo9yWLNN2un7f")' }}
+            style={{ backgroundImage: `url("${settings.coverPhoto}")` }}
           />
         </div>
 
@@ -51,7 +50,7 @@ export default function CustomerHome({ onBack, onCheckout }: Props) {
           </h2>
           
           <div className="space-y-6">
-            {MENU_ITEMS.map(item => (
+            {settings.menuItems.map(item => (
               <div 
                 key={item.id}
                 className="flex items-center gap-4 bg-background-light/50 dark:bg-zinc-800/50 p-3 rounded-xl border border-primary/5"

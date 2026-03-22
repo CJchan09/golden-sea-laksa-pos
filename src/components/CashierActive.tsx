@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
 import { formatCurrency } from '../utils';
-import { MENU_ITEMS, SIZES, NOODLE_BASES, ADD_ONS } from '../constants';
+import { SIZES, NOODLE_BASES, ADD_ONS } from '../constants';
 import { CheckCircle, XCircle, Clock, CreditCard, Banknote, X, QrCode } from 'lucide-react';
 import { PaymentMethod } from '../types';
 
 export default function CashierActive() {
-  const { orders, updateOrderStatus, markAsPaid } = useStore();
+  const { orders, updateOrderStatus, markAsPaid, settings } = useStore();
   const [activeSection, setActiveSection] = useState<'pending' | 'preparing'>('pending');
   const [payingOrderId, setPayingOrderId] = useState<string | null>(null);
 
@@ -49,7 +49,7 @@ export default function CashierActive() {
         {order.items && order.items.length > 0 ? (
           <ul className="space-y-2">
             {order.items.map((item, idx) => {
-              const menuItem = MENU_ITEMS.find(m => m.id === item.menuItemId);
+              const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
               const sizeName = SIZES.find(s => s.id === item.size)?.name.en;
               const noodles = item.noodleBases.map(n => NOODLE_BASES.find(nb => nb.id === n)?.name.en).join('+');
               const addons = item.addOns.map(a => ADD_ONS.find(ao => ao.id === a)?.name.en).join(', ');

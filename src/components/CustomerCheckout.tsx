@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
 import { formatCurrency } from '../utils';
-import { MENU_ITEMS, SIZES, NOODLE_BASES, ADD_ONS } from '../constants';
-import { ArrowLeft, Trash2, Utensils, ShoppingBag } from 'lucide-react';
-import { OrderType } from '../types';
+import { SIZES, NOODLE_BASES, ADD_ONS } from '../constants';
+import { OrderType, PaymentMethod } from '../types';
+import { Banknote, QrCode, ArrowLeft, Trash2, ShoppingBag } from 'lucide-react';
 
 interface Props {
   onBack: () => void;
 }
 
 export default function CustomerCheckout({ onBack }: Props) {
-  const { language, cart, removeFromCart, submitOrder } = useStore();
+  const { language, cart, removeFromCart, submitOrder, settings } = useStore();
   const [orderType, setOrderType] = useState<OrderType>('Dine-in');
   const [tableNo, setTableNo] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
 
   const totalAmount = cart.reduce((sum, item) => sum + item.totalPrice, 0);
 
@@ -21,9 +22,18 @@ export default function CustomerCheckout({ onBack }: Props) {
       alert(language === 'en' ? 'Please enter a table number.' : '请输入桌号。');
       return;
     }
+    if (!paymentMethod) {
+      alert(language === 'en' ? 'Please select a payment method.' : '请选择支付方式。');
+      return;
+    }
 
     await submitOrder(orderType, tableNo);
-    alert(language === 'en' ? 'Order Submitted! Please pay at the counter.' : '订单已提交！请到柜台付款。');
+    
+    if (paymentMethod === 'Cash') {
+      alert(language === 'en' ? 'Order Submitted! Please pay at the counter.' : '订单已提交！请到柜台付款。');
+    } else {
+      alert(language === 'en' ? 'Order Submitted! Please show your payment receipt to the staff.' : '订单已提交！请向员工出示付款截图。');
+    }
     onBack();
   };
 
@@ -65,7 +75,7 @@ export default function CustomerCheckout({ onBack }: Props) {
 
       <main className="flex-1 w-full pb-32">
         {/* Header Image */}
-        <div className="w-full h-40 bg-center bg-no-repeat bg-cover" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCjegoCLzYirXlh1HTLs2_xx75ZJoMPr5SyRVMiS8xTZ1uHZhqRoWFrEDGlID_-pHYBji24mgud-wfj8HtJWpu5iDpCcuWU-on863ufLGMwqrB01nDP6Xq_QxfBQMYBFa5xys0XxG-KzBmBkXxEo0FSPF4OAZhLvJ9s6wn1yhcxFlgwpnkNCm7tg29l-8URv4vqEQliXrBD2PKOqGjwXRKUN9QqkYXarnIo5-Gpzgyqq1vMsjMMadsKz-1Yq96yxHxnRWaQib9OFU2w")' }}></div>
+        <div className="w-full h-40 bg-center bg-no-repeat bg-cover" style={{ backgroundImage: `url("${settings.coverPhoto}")` }}></div>
 
         <div className="p-6 space-y-8">
           {/* Order Type */}
@@ -122,7 +132,7 @@ export default function CustomerCheckout({ onBack }: Props) {
             </h2>
             <div className="bg-white dark:bg-zinc-800 rounded-2xl border border-primary/10 p-5 space-y-5 shadow-sm">
               {cart.map((item) => {
-                const menuItem = MENU_ITEMS.find(m => m.id === item.menuItemId);
+                const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
                 const sizeName = SIZES.find(s => s.id === item.size)?.name[language];
                 const noodles = item.noodleBases.map(n => NOODLE_BASES.find(nb => nb.id === n)?.name[language]).join(' + ');
                 const addons = item.addOns.map(a => ADD_ONS.find(ao => ao.id === a)?.name[language]).join(', ');
@@ -172,6 +182,56 @@ export default function CustomerCheckout({ onBack }: Props) {
               </div>
             </div>
           </section>
+
+          {/* Payment Method */}
+          <section>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-4">
+              {language === 'en' ? 'Payment Method / 支付方式' : '支付方式 / Payment Method'}
+            </h2>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => setPaymentMethod('Cash')}
+                className={`flex flex-col items-center justify-center py-4 rounded-2xl border-2 transition-all ${
+                  paymentMethod === 'Cash'
+                    ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
+                    : 'border-primary/10 bg-white dark:bg-zinc-800 text-slate-500 hover:border-green-500/50'
+                }`}
+              >
+                <Banknote className="w-8 h-8 mb-2" />
+                <span className="font-bold text-sm">Cash / 现金</span>
+              </button>
+              <button
+                onClick={() => setPaymentMethod('QR Pay')}
+                className={`flex flex-col items-center justify-center py-4 rounded-2xl border-2 transition-all ${
+                  paymentMethod === 'QR Pay'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
+                    : 'border-primary/10 bg-white dark:bg-zinc-800 text-slate-500 hover:border-blue-500/50'
+                }`}
+              >
+                <QrCode className="w-8 h-8 mb-2" />
+                <span className="font-bold text-sm">QR Pay / 扫码支付</span>
+              </button>
+            </div>
+
+            {paymentMethod === 'QR Pay' && settings.qrImage && (
+              <div className="mt-4 p-4 bg-white dark:bg-zinc-800 rounded-2xl border border-blue-100 dark:border-blue-900/50 text-center animate-in zoom-in-95 duration-200">
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-3 font-medium">
+                  {language === 'en' ? 'Please scan to pay' : '请扫描下方二维码付款'}
+                </p>
+                <img src={settings.qrImage} alt="QR Payment" className="w-full max-w-[200px] mx-auto rounded-xl shadow-sm" />
+              </div>
+            )}
+            {paymentMethod === 'QR Pay' && !settings.qrImage && (
+              <div className="mt-4 p-4 text-center text-slate-500 bg-white dark:bg-zinc-800 rounded-2xl">
+                {language === 'en' ? 'No QR code available.' : '未设置收款二维码。'}
+              </div>
+            )}
+            {paymentMethod === 'Cash' && (
+              <div className="mt-4 text-center text-slate-500 font-medium text-sm">
+                {language === 'en' ? 'Please pay at the cashier counter.' : '请到柜台支付现金。'}
+              </div>
+            )}
+          </section>
         </div>
       </main>
 
@@ -179,7 +239,12 @@ export default function CustomerCheckout({ onBack }: Props) {
       <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-900 border-t border-primary/10 p-6 pb-safe z-40 max-w-md mx-auto">
         <button 
           onClick={handleConfirm}
-          className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 px-6 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-primary/30 text-lg"
+          disabled={!paymentMethod}
+          className={`w-full font-bold py-4 px-6 rounded-xl flex items-center justify-center gap-2 transition-all text-lg ${
+            !paymentMethod 
+              ? 'bg-slate-300 dark:bg-slate-700 text-slate-500 cursor-not-allowed'
+              : 'bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/30 active:scale-[0.98]'
+          }`}
         >
           {language === 'en' ? 'Confirm Order / 确认下单' : '确认下单 / Confirm Order'}
         </button>

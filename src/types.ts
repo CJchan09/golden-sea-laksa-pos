@@ -70,3 +70,11 @@ export interface SalesStats {
   totals: { bowls: number; revenue: number; orders: number };
   daily: DailyStat[];
 }
+
+export interface ShopSettings {
+  shopNameEn: string;
+  shopNameZh: string;
+  coverPhoto: string;
+  qrImage: string | null;
+  menuItems: MenuItem[];
+}

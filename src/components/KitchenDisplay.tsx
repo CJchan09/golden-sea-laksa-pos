@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store';
 import { formatCurrency } from '../utils';
-import { MENU_ITEMS, SIZES, NOODLE_BASES, ADD_ONS } from '../constants';
+import { SIZES, NOODLE_BASES, ADD_ONS } from '../constants';
 import { CheckCircle, ChefHat, Clock } from 'lucide-react';
 
 function getElapsedMinutes(timestamp: string): number {
@@ -29,7 +29,7 @@ function playBeep() {
 }
 
 export default function KitchenDisplay() {
-  const { orders, updateOrderStatus } = useStore();
+  const { orders, updateOrderStatus, settings } = useStore();
   const [, setTick] = useState(0);
   const prevCountRef = useRef(0);
 
@@ -137,7 +137,7 @@ export default function KitchenDisplay() {
                 {order.items && order.items.length > 0 ? (
                   <ul className="space-y-4">
                     {order.items.map((item, idx) => {
-                      const menuItem = MENU_ITEMS.find(m => m.id === item.menuItemId);
+                      const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
                       const sizeName = SIZES.find(s => s.id === item.size)?.name.zh;
                       const noodles = item.noodleBases.map(n => NOODLE_BASES.find(nb => nb.id === n)?.name.zh).join('+');
                       const addons = item.addOns.map(a => ADD_ONS.find(ao => ao.id === a)?.name.zh);

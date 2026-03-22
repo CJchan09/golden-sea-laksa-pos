@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
-import { MENU_ITEMS } from '../constants';
 import { MenuItem, OrderType, PaymentMethod } from '../types';
 import { formatCurrency } from '../utils';
 import CustomizationModal from './CustomizationModal';
 import { ShoppingCart, Trash2, CreditCard, Banknote, X, QrCode } from 'lucide-react';
 
 export default function CashierRegister() {
-  const { language, cart, addToCart, removeFromCart, clearCart, submitOrder, markAsPaid, orders } = useStore();
+  const { language, cart, addToCart, removeFromCart, clearCart, submitOrder, markAsPaid, orders, settings } = useStore();
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [orderType, setOrderType] = useState<OrderType>('Dine-in');
   const [tableNo, setTableNo] = useState('');
@@ -41,7 +40,7 @@ export default function CashierRegister() {
       <div className="flex-1">
         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Register / 收银台</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {MENU_ITEMS.map(item => (
+          {settings.menuItems.map(item => (
             <button
               key={item.id}
               onClick={() => setSelectedItem(item)}
@@ -92,7 +91,7 @@ export default function CashierRegister() {
             </div>
           ) : (
             cart.map(item => {
-              const menuItem = MENU_ITEMS.find(m => m.id === item.menuItemId);
+              const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
               return (
                 <div key={item.id} className="flex justify-between items-start pb-4 border-b border-gray-100 dark:border-zinc-800 last:border-0 last:pb-0">
                   <div className="flex-1 pr-2">
@@ -197,15 +196,12 @@ export default function CashierRegister() {
                 QR Pay / 扫码支付
               </button>
               {/* Show uploaded QR image if available */}
-              {(() => {
-                const qrImg = localStorage.getItem('golden_sea_laksa_qr_image');
-                return qrImg ? (
-                  <div className="mt-2 p-3 bg-white rounded-xl border border-gray-200 dark:border-zinc-700">
-                    <p className="text-xs text-center text-gray-500 dark:text-gray-400 mb-2 font-medium">QR Code / 二维码</p>
-                    <img src={qrImg} alt="QR Payment" className="w-full max-h-48 object-contain mx-auto rounded-lg" />
-                  </div>
-                ) : null;
-              })()}
+              {settings.qrImage && (
+                <div className="mt-2 p-3 bg-white rounded-xl border border-gray-200 dark:border-zinc-700">
+                  <p className="text-xs text-center text-gray-500 dark:text-gray-400 mb-2 font-medium">QR Code / 二维码</p>
+                  <img src={settings.qrImage} alt="QR Payment" className="w-full max-h-48 object-contain mx-auto rounded-lg" />
+                </div>
+              )}
             </div>
           </div>
         </div>

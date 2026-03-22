@@ -1,13 +1,22 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { Order, CartItem, Language, PaymentMethod, SalesStats } from './types';
+import { Order, CartItem, Language, PaymentMethod, SalesStats, ShopSettings } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
-import { GAS_URL, MENU_ITEMS, SIZES, NOODLE_BASES, ADD_ONS } from './constants';
+import { GAS_URL, MENU_ITEMS as DEFAULT_MENU_ITEMS, SIZES, NOODLE_BASES, ADD_ONS } from './constants';
 
 const ORDERS_KEY = 'golden_sea_laksa_orders';
 const CART_KEY = 'golden_sea_laksa_cart';
 const LANG_KEY = 'golden_sea_laksa_lang';
+const SETTINGS_KEY = 'golden_sea_laksa_settings';
 const POLL_INTERVAL = 5000; // 5 seconds
+
+const DEFAULT_SETTINGS: ShopSettings = {
+  shopNameEn: 'Golden Sea Laksa',
+  shopNameZh: '金海叻沙',
+  coverPhoto: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCjegoCLzYirXlh1HTLs2_xx75ZJoMPr5SyRVMiS8xTZ1uHZhqRoWFrEDGlID_-pHYBji24mgud-wfj8HtJWpu5iDpCcuWU-on863ufLGMwqrB01nDP6Xq_QxfBQMYBFa5xys0XxG-KzBmBkXxEo0FSPF4OAZhLvJ9s6wn1yhcxFlgwpnkNCm7tg29l-8URv4vqEQliXrBD2PKOqGjwXRKUN9QqkYXarnIo5-Gpzgyqq1vMsjMMadsKz-1Yq96yxHxnRWaQib9OFU2w',
+  qrImage: null,
+  menuItems: DEFAULT_MENU_ITEMS
+};
 
 // BroadcastChannel for cross-tab sync (different browser tabs)
 const channel = typeof BroadcastChannel !== 'undefined'
@@ -58,6 +67,8 @@ interface StoreState {
   markAsPaid: (localOrderId: string, paymentMethod: PaymentMethod) => void;
   updateOrderStatus: (localOrderId: string, status: 'Preparing' | 'Completed' | 'Cancelled') => void;
   fetchStats: (from: string, to: string) => Promise<SalesStats | null>;
+  settings: ShopSettings;
+  updateSettings: (newSettings: ShopSettings) => void;
 }
 
 // ==================== React Context ====================
@@ -69,6 +80,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<Language>('en');
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [settings, setSettings] = useState<ShopSettings>(() => {
+    // Also try to migrate old QR image format if any
+    const oldQr = localStorage.getItem('golden_sea_laksa_qr_image');
+    if (oldQr) {
+      DEFAULT_SETTINGS.qrImage = oldQr;
+      localStorage.removeItem('golden_sea_laksa_qr_image');
+    }
+    const stored = localStorage.getItem(SETTINGS_KEY);
+    return stored ? JSON.parse(stored) : DEFAULT_SETTINGS;
+  });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Keep a ref to orders so async functions always have the latest
   const ordersRef = useRef<Order[]>(orders);
@@ -122,31 +143,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }));
 
           setOrders(prev => {
-            const localUnsyncedIds = new Set(
-              prev.filter(o => !o.synced).map(o => o.local_order_id)
-            );
+            const merged = [...prev];
             
-            const merged = [...remoteOrders];
-            
-            prev.forEach(o => {
-              if (localUnsyncedIds.has(o.local_order_id) &&
-                  !remoteOrders.find(r => r.local_order_id === o.local_order_id)) {
-                merged.push(o);
+            remoteOrders.forEach(remote => {
+              const localIndex = merged.findIndex(l => l.local_order_id === remote.local_order_id);
+              if (localIndex === -1) {
+                // New order from remote. Only accept if it has valid data (avoid broken GAS rows)
+                if (remote.total_qty > 0 || remote.total_amount > 0) {
+                  merged.push(remote);
+                }
+              } else {
+                // Exists locally. ONLY update status and paid to avoid overwriting items with GAS zeroes.
+                const local = merged[localIndex];
+                if (remote.status) {
+                  merged[localIndex] = {
+                    ...local,
+                    status: remote.status,
+                    paid: remote.paid,
+                    payment_method: remote.payment_method || local.payment_method,
+                    synced: true
+                  };
+                }
               }
             });
 
-            const mergedWithItems = merged.map(m => {
-              const local = prev.find(p => p.local_order_id === m.local_order_id);
-              if (local && local.items && local.items.length > 0) {
-                return { ...m, items: local.items };
-              }
-              return m;
-            });
-
-            mergedWithItems.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+            merged.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
             
-            localStorage.setItem(ORDERS_KEY, JSON.stringify(mergedWithItems));
-            return mergedWithItems;
+            localStorage.setItem(ORDERS_KEY, JSON.stringify(merged));
+            return merged;
           });
         }
       } catch (e) {
@@ -178,6 +202,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(CART_KEY, JSON.stringify(newCart));
   }, []);
 
+  const updateSettings = useCallback((newSettings: ShopSettings) => {
+    setSettings(newSettings);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings));
+  }, []);
+
   const changeLanguage = useCallback((lang: Language) => {
     setLanguage(lang);
     localStorage.setItem(LANG_KEY, lang);
@@ -207,7 +236,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const generateItemsSummary = (items: CartItem[], lang: Language): string => {
     return items.map(item => {
-      const menuItem = MENU_ITEMS.find(m => m.id === item.menuItemId);
+      const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
       const sizeName = SIZES.find(s => s.id === item.size)?.name[lang];
       const noodles = item.noodleBases.map(n => NOODLE_BASES.find(nb => nb.id === n)?.name[lang]).join('+');
       const addons = item.addOns.map(a => ADD_ONS.find(ao => ao.id === a)?.name[lang]).join(',');
@@ -273,7 +302,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
 
     return newOrder.local_order_id;
-  }, [cart, language, saveOrders, broadcastOrders]);
+  }, [cart, language, saveOrders, broadcastOrders, settings.menuItems]);
 
   // ---- Mark as Paid ----
   const markAsPaid = useCallback((localOrderId: string, paymentMethod: PaymentMethod) => {
@@ -338,6 +367,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     markAsPaid,
     updateOrderStatus,
     fetchStats,
+    settings,
+    updateSettings,
   };
 
   return (
