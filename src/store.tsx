@@ -15,7 +15,10 @@ const DEFAULT_SETTINGS: ShopSettings = {
   shopNameZh: '金海叻沙',
   coverPhoto: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCjegoCLzYirXlh1HTLs2_xx75ZJoMPr5SyRVMiS8xTZ1uHZhqRoWFrEDGlID_-pHYBji24mgud-wfj8HtJWpu5iDpCcuWU-on863ufLGMwqrB01nDP6Xq_QxfBQMYBFa5xys0XxG-KzBmBkXxEo0FSPF4OAZhLvJ9s6wn1yhcxFlgwpnkNCm7tg29l-8URv4vqEQliXrBD2PKOqGjwXRKUN9QqkYXarnIo5-Gpzgyqq1vMsjMMadsKz-1Yq96yxHxnRWaQib9OFU2w',
   qrImage: null,
-  menuItems: DEFAULT_MENU_ITEMS
+  menuItems: DEFAULT_MENU_ITEMS,
+  enableTax: false,
+  taxRate: 6,
+  takeawayFee: 0.50
 };
 
 // BroadcastChannel for cross-tab sync (different browser tabs)
@@ -81,14 +84,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   const [settings, setSettings] = useState<ShopSettings>(() => {
-    // Also try to migrate old QR image format if any
     const oldQr = localStorage.getItem('golden_sea_laksa_qr_image');
     if (oldQr) {
       DEFAULT_SETTINGS.qrImage = oldQr;
       localStorage.removeItem('golden_sea_laksa_qr_image');
     }
     const stored = localStorage.getItem(SETTINGS_KEY);
-    return stored ? JSON.parse(stored) : DEFAULT_SETTINGS;
+    const parsed = stored ? JSON.parse(stored) : DEFAULT_SETTINGS;
+
+    // Migration for new varied options and taxes
+    if (parsed.menuItems) {
+      parsed.menuItems = parsed.menuItems.map((item: any) => ({
+        ...item,
+        sizes: item.sizes || [...SIZES],
+        noodleBases: item.noodleBases || [...NOODLE_BASES],
+        addOns: item.addOns || [...ADD_ONS]
+      }));
+    }
+    parsed.enableTax = parsed.enableTax ?? false;
+    parsed.taxRate = parsed.taxRate ?? 6;
+    parsed.takeawayFee = parsed.takeawayFee ?? 0.50;
+
+    return parsed as ShopSettings;
   });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Keep a ref to orders so async functions always have the latest
@@ -98,7 +115,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ---- Load initial state ----
   useEffect(() => {
     const storedOrders = localStorage.getItem(ORDERS_KEY);
-    if (storedOrders) setOrders(JSON.parse(storedOrders));
+    if (storedOrders) {
+      // Orders are never pruned by age. Sales history is the merchant's own
+      // record; only they decide when to archive or delete it. Freeing storage
+      // is handled by image compression and an explicit Archive/Export action,
+      // not by quietly dropping last month's takings.
+      const parsedOrders: Order[] = JSON.parse(storedOrders);
+      setOrders(parsedOrders);
+    }
 
     const storedCart = localStorage.getItem(CART_KEY);
     if (storedCart) setCart(JSON.parse(storedCart));
@@ -115,6 +139,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'orders_updated') {
         setOrders(event.data.orders);
+      } else if (event.data?.type === 'settings_updated') {
+        setSettings(event.data.settings);
       }
     };
     channel?.addEventListener('message', handleMessage);
@@ -144,7 +170,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
           setOrders(prev => {
             const merged = [...prev];
-            
+
             remoteOrders.forEach(remote => {
               const localIndex = merged.findIndex(l => l.local_order_id === remote.local_order_id);
               if (localIndex === -1) {
@@ -168,7 +194,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             });
 
             merged.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-            
+
+            // Recalculate order_ids for current month based on chronological order (earliest first)
+            const currentMonthStr = format(new Date(), 'yyyy-MM');
+            const month = new Date().getMonth() + 1;
+
+            const monthOrdersAsc = [...merged]
+              .filter(o => o.timestamp.startsWith(currentMonthStr) && o.status !== 'Cancelled')
+              .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+            const idMap = new Map<string, string>();
+            monthOrdersAsc.forEach((o, idx) => {
+              idMap.set(o.local_order_id, `${month * 10000 + idx + 1}`);
+            });
+
+            merged.forEach(o => {
+              if (idMap.has(o.local_order_id)) {
+                o.order_id = idMap.get(o.local_order_id)!;
+              }
+            });
+
             localStorage.setItem(ORDERS_KEY, JSON.stringify(merged));
             return merged;
           });
@@ -205,6 +250,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updateSettings = useCallback((newSettings: ShopSettings) => {
     setSettings(newSettings);
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings));
+    channel?.postMessage({ type: 'settings_updated', settings: newSettings });
   }, []);
 
   const changeLanguage = useCallback((lang: Language) => {
@@ -237,14 +283,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const generateItemsSummary = (items: CartItem[], lang: Language): string => {
     return items.map(item => {
       const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
-      const sizeName = SIZES.find(s => s.id === item.size)?.name[lang];
-      const noodles = item.noodleBases.map(n => NOODLE_BASES.find(nb => nb.id === n)?.name[lang]).join('+');
-      const addons = item.addOns.map(a => ADD_ONS.find(ao => ao.id === a)?.name[lang]).join(',');
-      
-      let summary = `${item.quantity}x ${menuItem?.name[lang]}-${sizeName}-${noodles}`;
+      if (!menuItem) return '';
+
+      const sizeName = item.sizeId
+        ? menuItem.sizes.find(s => s.id === item.sizeId)?.name[lang] || ''
+        : SIZES.find(s => s.id === (item.size as any))?.name[lang];
+
+      const noodlesArr = item.noodleBaseIds
+        ? item.noodleBaseIds.map(n => menuItem.noodleBases.find(nb => nb.id === n)?.name[lang])
+        : (item.noodleBases || []).map(n => NOODLE_BASES.find(nb => nb.id === (n as any))?.name[lang]);
+      const noodles = noodlesArr.filter(Boolean).join('+');
+
+      const addonsArr = item.addOnIds
+        ? item.addOnIds.map(a => menuItem.addOns.find(ao => ao.id === a)?.name[lang])
+        : (item.addOns || []).map(a => ADD_ONS.find(ao => ao.id === (a as any))?.name[lang]);
+      const addons = addonsArr.filter(Boolean).join(',');
+
+      let summary = `${item.quantity}x ${menuItem.name[lang]}-${sizeName}${noodles ? '-' + noodles : ''}`;
       if (addons) summary += `-加${addons}`;
       return summary;
-    }).join('; ');
+    }).filter(Boolean).join('; ');
   };
 
   // ---- Submit Order ----
@@ -254,12 +312,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (currentCart.length === 0) return null;
 
     const totalQty = currentCart.reduce((sum, item) => sum + item.quantity, 0);
-    const totalAmount = currentCart.reduce((sum, item) => sum + item.totalPrice, 0);
+    const subtotal = currentCart.reduce((sum, item) => sum + item.totalPrice, 0);
+
+    let takeaway_fee = 0;
+    if (orderType === 'Takeaway') takeaway_fee = settings.takeawayFee;
+
+    let tax_amount = 0;
+    if (settings.enableTax) {
+      tax_amount = parseFloat(((subtotal + takeaway_fee) * (settings.taxRate / 100)).toFixed(2));
+    }
+
+    const totalAmount = subtotal + takeaway_fee + tax_amount;
+
     const itemsSummary = generateItemsSummary(currentCart, language);
-    
+
     const currentOrders = ordersRef.current;
-    const todayCount = currentOrders.filter(o => o.timestamp.startsWith(format(new Date(), 'yyyy-MM-dd'))).length;
-    const orderId = `JH-${2000 + todayCount + 1}`;
+
+    // Calculate Monthly orders count based on chronological sort
+    const now = new Date();
+    const currentMonthStr = format(now, 'yyyy-MM');
+    const month = now.getMonth() + 1;
+
+    const monthOrders = currentOrders.filter(o => o.timestamp.startsWith(currentMonthStr) && o.status !== 'Cancelled');
+    const orderId = `${month * 10000 + monthOrders.length + 1}`;
 
     const newOrder: Order = {
       local_order_id: uuidv4(),
@@ -270,6 +345,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       items_summary: itemsSummary,
       items: [...currentCart],
       total_qty: totalQty,
+      subtotal,
+      takeaway_fee,
+      tax_amount,
       total_amount: totalAmount,
       status: 'Pending',
       paid: false,
@@ -277,8 +355,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
 
     const updatedOrders = [newOrder, ...currentOrders];
+
+    // Safety recount for the UI state so it immediately reflects the proper sorted ID
+    const sortedMonthAsc = [...updatedOrders]
+      .filter(o => o.timestamp.startsWith(currentMonthStr) && o.status !== 'Cancelled')
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    const finalMap = new Map<string, string>();
+    sortedMonthAsc.forEach((o, idx) => finalMap.set(o.local_order_id, `${month * 10000 + idx + 1}`));
+    updatedOrders.forEach(o => {
+      if (finalMap.has(o.local_order_id)) {
+        o.order_id = finalMap.get(o.local_order_id)!;
+      }
+    });
+
     saveOrders(updatedOrders);
-    
+
     // Clear cart
     setCart([]);
     localStorage.setItem(CART_KEY, JSON.stringify([]));
@@ -307,20 +398,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ---- Mark as Paid ----
   const markAsPaid = useCallback((localOrderId: string, paymentMethod: PaymentMethod) => {
     setOrders(prev => {
-      const updated = prev.map(o =>
-        o.local_order_id === localOrderId
-          ? { ...o, paid: true, payment_method: paymentMethod, status: 'Preparing' as const }
-          : o
-      );
+      const updated = prev.map(o => {
+        if (o.local_order_id === localOrderId) {
+          const newStatus = o.status === 'Pending' ? 'Preparing' : o.status;
+          return { ...o, paid: true, payment_method: paymentMethod, status: newStatus as any };
+        }
+        return o;
+      });
       localStorage.setItem(ORDERS_KEY, JSON.stringify(updated));
       broadcastOrders(updated);
       return updated;
     });
 
+    const order = ordersRef.current.find(o => o.local_order_id === localOrderId);
+    const newStatus = order?.status === 'Pending' ? 'Preparing' : (order?.status || 'Preparing');
+
     gasPost({
       action: 'updateStatus',
       local_order_id: localOrderId,
-      status: 'Preparing',
+      status: newStatus,
       paid: true,
       payment_method: paymentMethod,
     });

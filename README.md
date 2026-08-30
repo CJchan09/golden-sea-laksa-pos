@@ -1,20 +1,51 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# CJ F&B POS — Public Test Build
 
-# Run and deploy your AI Studio app
+A mobile-first, local-first ordering, cashier, and kitchen workflow for small F&B businesses.
 
-This contains everything you need to run your app locally.
+## Try the public demo
 
-View your app in AI Studio: https://ai.studio/apps/a7d44c4e-8c20-491c-862e-16e908053432
+**Live URL:** https://cjchan09.github.io/golden-sea-laksa-pos/
 
-## Run Locally
+- Customer ordering: choose **Try sample store / 试用示范店**.
+- Staff console: choose **Staff console** and use the demo password `admin123`.
+- Kitchen display: choose **KDS** from the home page.
 
-**Prerequisites:**  Node.js
+Suggested test flow:
 
+1. Add a menu item and complete its required options.
+2. Submit a dine-in cash order.
+3. Open Staff console → Active and mark the order paid.
+4. Open KDS and mark the order completed.
+5. Return to Staff console → History and confirm the order total.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Public test boundaries
+
+- This build stores test data in the current browser/device. It is not a cloud account.
+- Different phones and computers do not automatically share orders.
+- The staff password is only a local demo gate and is not production security.
+- Do not enter real customer data, bank QR codes, passwords, or business records.
+- Google Sheet sync is disabled in the public build.
+- Installation, offline reopening, and native Android/iOS packaging are not included yet.
+
+To reset your test data, clear this site's browser storage.
+
+## Run locally
+
+Prerequisite: Node.js 20 or newer.
+
+```bash
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000/`.
+
+## Verify
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
+The GitHub Pages workflow builds from `main`. The public deployment intentionally does not inject private API, Google Apps Script, or Google Sheet values.

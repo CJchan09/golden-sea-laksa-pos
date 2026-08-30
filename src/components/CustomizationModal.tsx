@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { MenuItem, SizeOption, NoodleOption, AddOnOption, Language, CartItem } from '../types';
-import { SIZES, NOODLE_BASES, ADD_ONS } from '../constants';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { MenuItem, Language, CartItem } from '../types';
 import { formatCurrency } from '../utils';
 import { X, Plus, Minus } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -13,57 +12,79 @@ interface Props {
 }
 
 export default function CustomizationModal({ item, language, onClose, onAdd }: Props) {
-  const [size, setSize] = useState<SizeOption>('Small');
-  const [noodleBases, setNoodleBases] = useState<NoodleOption[]>([]);
-  const [addOns, setAddOns] = useState<AddOnOption[]>([]);
+  const [sizeId, setSizeId] = useState<string>(item.sizes[0]?.id || '');
+  const [noodleBaseIds, setNoodleBaseIds] = useState<string[]>([]);
+  const [addOnIds, setAddOnIds] = useState<string[]>([]);
   const [quantity, setQuantity] = useState(1);
+  const [validationError, setValidationError] = useState('');
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
 
-  const handleNoodleToggle = (noodle: NoodleOption) => {
-    if (noodleBases.includes(noodle)) {
-      setNoodleBases(noodleBases.filter(n => n !== noodle));
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [onClose]);
+
+  const handleNoodleToggle = (noodleId: string) => {
+    setValidationError('');
+    if (noodleBaseIds.includes(noodleId)) {
+      setNoodleBaseIds(noodleBaseIds.filter(n => n !== noodleId));
     } else {
-      if (noodleBases.length < 2) {
-        setNoodleBases([...noodleBases, noodle]);
+      if (noodleBaseIds.length < 2) {
+        setNoodleBaseIds([...noodleBaseIds, noodleId]);
       }
     }
   };
 
-  const handleAddOnToggle = (addon: AddOnOption) => {
-    if (addOns.includes(addon)) {
-      setAddOns(addOns.filter(a => a !== addon));
+  const handleAddOnToggle = (addonId: string) => {
+    if (addOnIds.includes(addonId)) {
+      setAddOnIds(addOnIds.filter(a => a !== addonId));
     } else {
-      setAddOns([...addOns, addon]);
+      setAddOnIds([...addOnIds, addonId]);
     }
   };
 
   const calculateTotal = () => {
     let total = item.basePrice;
-    const sizePrice = SIZES.find(s => s.id === size)?.price || 0;
+    const sizePrice = item.sizes.find(s => s.id === sizeId)?.price || 0;
     total += sizePrice;
     
-    const addOnPrice = addOns.reduce((sum, a) => {
-      return sum + (ADD_ONS.find(ao => ao.id === a)?.price || 0);
+    const addOnPrice = addOnIds.reduce((sum, a) => {
+      return sum + (item.addOns.find(ao => ao.id === a)?.price || 0);
     }, 0);
     total += addOnPrice;
 
     return total * quantity;
   };
 
-  const isNoodleDisabled = (noodle: NoodleOption) => {
-    return noodleBases.length >= 2 && !noodleBases.includes(noodle);
+  const isNoodleDisabled = (noodleId: string) => {
+    return noodleBaseIds.length >= 2 && !noodleBaseIds.includes(noodleId);
   };
 
   const handleAddToCart = () => {
-    if (noodleBases.length === 0) {
-      alert(language === 'en' ? 'Please select at least one noodle base.' : '请选择至少一种面条。');
+    if (item.noodleBases.length > 0 && noodleBaseIds.length === 0) {
+      setValidationError(language === 'en' ? 'Please select at least one noodle base.' : '请选择至少一种面条。');
       return;
     }
 
     onAdd({
       menuItemId: item.id,
-      size,
-      noodleBases,
-      addOns,
+      sizeId,
+      noodleBaseIds,
+      addOnIds,
       quantity,
       unitPrice: calculateTotal() / quantity,
       totalPrice: calculateTotal()
@@ -77,14 +98,20 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/40 p-0 sm:p-4"
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 p-0 sm:p-4"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) onClose();
+        }}
       >
         <motion.div 
           initial={{ y: '100%' }}
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="relative flex h-auto max-h-[90vh] w-full max-w-lg flex-col bg-background-light dark:bg-background-dark rounded-t-xl sm:rounded-xl overflow-hidden shadow-2xl"
+          className="relative flex h-auto max-h-[96dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-xl bg-background-light shadow-2xl dark:bg-background-dark sm:max-h-[90vh] sm:rounded-xl"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
         >
           {/* Handle for mobile */}
           <div className="flex h-6 w-full items-center justify-center sm:hidden absolute top-0 z-20">
@@ -92,48 +119,59 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
           </div>
 
           {/* Header Image & Close */}
-          <div className="relative h-48 w-full shrink-0">
+          <div className="relative h-40 w-full shrink-0 sm:h-48">
             <img 
               src={item.image} 
               alt={item.name[language]} 
               className="h-full w-full object-cover"
             />
             <button 
+              ref={closeButtonRef}
+              type="button"
               onClick={onClose}
-              className="absolute top-4 right-4 h-10 w-10 flex items-center justify-center rounded-full bg-white/80 dark:bg-background-dark/80 backdrop-blur-md text-slate-900 dark:text-slate-100"
+              aria-label={language === 'en' ? 'Close item options' : '关闭商品选项'}
+              className="absolute top-4 right-4 h-11 w-11 flex items-center justify-center rounded-full bg-white/90 dark:bg-background-dark/90 backdrop-blur-md text-slate-900 dark:text-slate-100"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Content Area */}
-          <div className="flex-1 overflow-y-auto px-6 py-6">
+          <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
             <div className="flex justify-between items-start mb-2">
               <div>
-                <h2 className="text-slate-900 dark:text-slate-100 text-2xl font-bold leading-tight tracking-tight">
+                <h2 id={titleId} className="text-slate-900 dark:text-slate-100 text-2xl font-bold leading-tight tracking-tight">
                   {item.name[language]}
                 </h2>
-                <p className="text-primary font-semibold mt-1">
+                <p className="text-emphasis font-semibold mt-1 dark:text-primary">
                   From {formatCurrency(item.basePrice)}
                 </p>
               </div>
             </div>
             <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-6">
-              Authentic rich coconut curry broth served with fresh cockles, tofu puffs, and bean sprouts.
+              {language === 'en'
+                ? 'Choose the serving size, base, and optional add-ons for this item.'
+                : '请选择这份餐点的份量、主食和可选加料。'}
             </p>
+
+            {validationError && (
+              <p role="alert" className="mb-5 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+                {validationError}
+              </p>
+            )}
 
             {/* Size Selection */}
             <div className="mb-8">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-slate-900 dark:text-slate-100 text-lg font-bold">Size</h3>
-                <span className="text-xs font-medium px-2 py-1 bg-primary/10 text-primary rounded-full">Required</span>
+                <span className="text-xs font-medium px-2 py-1 bg-primary/15 text-emphasis dark:text-primary rounded-full">Required</span>
               </div>
               <div className="flex flex-col gap-3">
-                {SIZES.map(s => (
+                {item.sizes?.map(s => (
                   <label 
                     key={s.id}
                     className={`group flex items-center gap-4 rounded-xl border-2 p-4 transition-all cursor-pointer ${
-                      size === s.id 
+                      sizeId === s.id
                         ? 'border-primary bg-primary/5' 
                         : 'border-primary/10 dark:border-primary/5 hover:border-primary/30'
                     }`}
@@ -141,8 +179,8 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
                     <input 
                       type="radio" 
                       name="size-selection" 
-                      checked={size === s.id}
-                      onChange={() => setSize(s.id)}
+                      checked={sizeId === s.id}
+                      onChange={() => setSizeId(s.id)}
                       className="h-5 w-5 border-2 border-primary/30 bg-transparent text-primary focus:ring-primary focus:ring-offset-0"
                     />
                     <div className="flex grow flex-col">
@@ -166,9 +204,9 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
                 <p className="text-slate-500 dark:text-slate-400 text-sm">Select up to 2 for 'Cham' (Mix)</p>
               </div>
               <div className="grid grid-cols-1 gap-1">
-                {NOODLE_BASES.map(n => {
+                {item.noodleBases?.map(n => {
                   const disabled = isNoodleDisabled(n.id);
-                  const checked = noodleBases.includes(n.id);
+                  const checked = noodleBaseIds.includes(n.id);
                   return (
                     <label 
                       key={n.id}
@@ -197,8 +235,8 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
                 <p className="text-slate-500 dark:text-slate-400 text-sm">Optional</p>
               </div>
               <div className="grid grid-cols-1 gap-1">
-                {ADD_ONS.map(a => {
-                  const checked = addOns.includes(a.id);
+                {item.addOns?.map(a => {
+                  const checked = addOnIds.includes(a.id);
                   return (
                     <label 
                       key={a.id}
@@ -223,30 +261,36 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
           </div>
 
           {/* Sticky Footer Action */}
-          <div className="p-6 border-t border-primary/5 bg-background-light dark:bg-background-dark shrink-0">
-            <div className="flex items-center justify-between gap-4">
+          <div className="shrink-0 border-t border-zinc-200 bg-background-light p-4 dark:border-zinc-800 dark:bg-background-dark sm:p-6">
+            <div className="flex items-center justify-between gap-2 sm:gap-4">
               <div className="flex items-center bg-primary/10 rounded-full p-1 h-12">
                 <button 
+                  type="button"
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="w-10 h-10 flex items-center justify-center rounded-full text-primary hover:bg-primary/20 transition-colors"
+                  aria-label={language === 'en' ? 'Decrease quantity' : '减少数量'}
+                  className="w-11 h-11 flex items-center justify-center rounded-full text-emphasis hover:bg-primary/20 transition-colors dark:text-primary"
                 >
-                  <Minus className="w-5 h-5" />
+                  <Minus aria-hidden="true" className="w-5 h-5" />
                 </button>
                 <span className="w-8 text-center font-bold text-slate-900 dark:text-slate-100">{quantity}</span>
                 <button 
+                  type="button"
                   onClick={() => setQuantity(quantity + 1)}
-                  className="w-10 h-10 flex items-center justify-center rounded-full text-primary hover:bg-primary/20 transition-colors"
+                  aria-label={language === 'en' ? 'Increase quantity' : '增加数量'}
+                  className="w-11 h-11 flex items-center justify-center rounded-full text-emphasis hover:bg-primary/20 transition-colors dark:text-primary"
                 >
-                  <Plus className="w-5 h-5" />
+                  <Plus aria-hidden="true" className="w-5 h-5" />
                 </button>
               </div>
               
               <button 
+                type="button"
                 onClick={handleAddToCart}
-                className="flex-1 h-12 bg-primary hover:bg-primary/90 text-white font-bold rounded-full transition-all shadow-lg shadow-primary/30 flex items-center justify-center gap-2"
+                className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-primary px-3 text-sm font-bold text-on-primary shadow-lg shadow-black/15 transition-colors hover:bg-primary-hover min-[360px]:text-base"
               >
-                <span>Add to Order</span>
-                <span className="w-1 h-1 bg-white/40 rounded-full"></span>
+                <span className="hidden min-[360px]:inline">Add to Order</span>
+                <span className="min-[360px]:hidden">Add</span>
+                <span aria-hidden="true" className="h-1 w-1 rounded-full bg-black/30"></span>
                 <span>{formatCurrency(calculateTotal())}</span>
               </button>
             </div>
@@ -257,4 +301,3 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
     </AnimatePresence>
   );
 }
-

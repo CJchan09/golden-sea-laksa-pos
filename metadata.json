@@ -1,5 +1,5 @@
 {
-  "name": "Golden Sea Laksa POS",
-  "description": "Offline-first PWA POS and Customer Ordering System for Golden Sea Laksa.",
+  "name": "CJ F&B POS",
+  "description": "Local-first ordering, cashier and kitchen workflow for small F&B businesses.",
   "requestFramePermissions": []
 }

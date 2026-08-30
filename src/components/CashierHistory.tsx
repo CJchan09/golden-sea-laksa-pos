@@ -39,10 +39,13 @@ export default function CashierHistory() {
   const [isLoadingStats, setIsLoadingStats] = useState(false);
 
   // Local fallback stats from orders in localStorage
-  const today = format(new Date(), 'yyyy-MM-dd');
-  const localTodaysOrders = orders.filter(o => o.timestamp.startsWith(today) && o.status === 'Completed');
-  const localTotalBowls = localTodaysOrders.reduce((sum, o) => sum + o.total_qty, 0);
-  const localTotalRevenue = localTodaysOrders.reduce((sum, o) => sum + o.total_amount, 0);
+  const currentRange = getDateRange(dateRange);
+  const localOrdersRange = orders.filter(o => {
+    const oDate = o.timestamp.split(' ')[0];
+    return o.status === 'Completed' && oDate >= currentRange.from && oDate <= currentRange.to;
+  });
+  const localTotalBowls = localOrdersRange.reduce((sum, o) => sum + o.total_qty, 0);
+  const localTotalRevenue = localOrdersRange.reduce((sum, o) => sum + o.total_amount, 0);
 
   // Fetch stats from GAS when date range changes
   useEffect(() => {
@@ -60,7 +63,7 @@ export default function CashierHistory() {
   const displayTotals = stats?.totals || {
     bowls: localTotalBowls,
     revenue: localTotalRevenue,
-    orders: localTodaysOrders.length,
+    orders: localOrdersRange.length,
   };
   const dailyBreakdown = stats?.daily || [];
   const avgPerOrder = displayTotals.orders > 0 ? displayTotals.revenue / displayTotals.orders : 0;
@@ -70,8 +73,8 @@ export default function CashierHistory() {
 
   const paymentMethodLabel = (method?: string) => {
     switch (method) {
-      case 'Cash': return '💵 Cash';
-      case 'QR Pay': return '📱 QR Pay';
+      case 'Cash': return 'Cash';
+      case 'QR Pay': return 'QR Pay';
       default: return '—';
     }
   };
@@ -84,16 +87,18 @@ export default function CashierHistory() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       {/* Date Range Tabs */}
       <div className="flex bg-gray-200 dark:bg-zinc-800 p-1 rounded-xl">
         {tabs.map(tab => (
           <button
             key={tab.id}
+            type="button"
             onClick={() => setDateRange(tab.id)}
-            className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all ${
+            aria-pressed={dateRange === tab.id}
+            className={`min-h-11 min-w-0 flex-1 rounded-lg px-1 py-2.5 text-xs font-bold leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-950 ${
               dateRange === tab.id
-                ? 'bg-orange-600 text-white shadow-md'
+                ? 'bg-primary text-on-primary shadow-sm hover:bg-primary-hover'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
             }`}
           >
@@ -103,35 +108,35 @@ export default function CashierHistory() {
       </div>
 
       {/* Range Label + Google Sheet Button */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-          <Calendar className="w-4 h-4" />
-          <span className="text-sm font-medium">{getDateRange(dateRange).label}: {getDateRange(dateRange).from} → {getDateRange(dateRange).to}</span>
-          {isLoadingStats && <span className="text-xs text-orange-500 animate-pulse font-bold">Syncing...</span>}
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-gray-500 dark:text-gray-400">
+          <Calendar aria-hidden="true" className="h-4 w-4 shrink-0" />
+          <span className="min-w-0 text-sm font-medium [overflow-wrap:anywhere]">{getDateRange(dateRange).label}: {getDateRange(dateRange).from} → {getDateRange(dateRange).to}</span>
+          {isLoadingStats && <span className="animate-pulse text-xs font-bold text-emphasis dark:text-primary">Syncing...</span>}
         </div>
         {SHEET_URL && (
           <a
             href={SHEET_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 text-sm font-bold text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 transition-colors bg-green-50 dark:bg-green-900/20 px-4 py-2 rounded-lg border border-green-200 dark:border-green-800/30"
+            className="flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-bold text-green-700 transition-colors hover:bg-green-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 dark:border-green-800/30 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 dark:focus-visible:ring-green-400 dark:focus-visible:ring-offset-zinc-950 sm:w-auto"
           >
-            <ExternalLink className="w-4 h-4" />
+            <ExternalLink aria-hidden="true" className="w-4 h-4" />
             Open Google Sheet
           </a>
         )}
       </div>
 
       {/* Dashboard KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 min-[360px]:grid-cols-2 lg:grid-cols-4">
         <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Bowls / 碗数</span>
-            <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
-              <ChefHat className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20">
+              <ChefHat aria-hidden="true" className="h-4 w-4 text-emphasis dark:text-primary" />
             </div>
           </div>
-          <div className="text-3xl font-extrabold text-gray-900 dark:text-white">{displayTotals.bowls}</div>
+          <div className="text-3xl font-extrabold tabular-nums text-gray-900 dark:text-white">{displayTotals.bowls}</div>
           {dateRange !== 'today' && dailyBreakdown.length > 1 && (
             <p className="text-xs text-gray-400 mt-1">≈ {avgBowlsPerDay.toFixed(0)} /day</p>
           )}
@@ -141,30 +146,30 @@ export default function CashierHistory() {
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Revenue / 营收</span>
             <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-              <DollarSign className="w-4 h-4 text-green-600 dark:text-green-400" />
+              <DollarSign aria-hidden="true" className="w-4 h-4 text-green-600 dark:text-green-400" />
             </div>
           </div>
-          <div className="text-3xl font-extrabold text-gray-900 dark:text-white">{formatCurrency(displayTotals.revenue)}</div>
+          <div className="text-3xl font-extrabold tabular-nums text-emphasis dark:text-primary">{formatCurrency(displayTotals.revenue)}</div>
         </div>
 
         <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Orders / 订单</span>
             <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <TrendingUp aria-hidden="true" className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             </div>
           </div>
-          <div className="text-3xl font-extrabold text-gray-900 dark:text-white">{displayTotals.orders}</div>
+          <div className="text-3xl font-extrabold tabular-nums text-gray-900 dark:text-white">{displayTotals.orders}</div>
         </div>
 
         <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Avg / 均值</span>
             <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-              <Banknote className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <Banknote aria-hidden="true" className="w-4 h-4 text-purple-600 dark:text-purple-400" />
             </div>
           </div>
-          <div className="text-3xl font-extrabold text-gray-900 dark:text-white">
+          <div className="text-3xl font-extrabold tabular-nums text-emphasis dark:text-primary">
             {avgPerOrder > 0 ? formatCurrency(avgPerOrder) : 'RM 0.00'}
           </div>
           <p className="text-xs text-gray-400 mt-1">per order</p>
@@ -175,11 +180,11 @@ export default function CashierHistory() {
       {dateRange !== 'today' && dailyBreakdown.length > 0 && (
         <div>
           <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-            <Calendar className="w-5 h-5" />
+            <Calendar aria-hidden="true" className="w-5 h-5" />
             Daily Breakdown / 每日明细
           </h3>
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800 overflow-hidden">
-            <table className="w-full">
+          <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <table className="w-full min-w-[36rem]">
               <thead>
                 <tr className="border-b border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-950/50">
                   <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Date</th>
@@ -193,7 +198,7 @@ export default function CashierHistory() {
                   <tr key={day.date} className="border-b border-gray-50 dark:border-zinc-800/50 last:border-0 hover:bg-gray-50 dark:hover:bg-zinc-800/30 transition-colors">
                     <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">{day.date}</td>
                     <td className="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300 font-medium">{day.bowls}</td>
-                    <td className="px-4 py-3 text-sm text-right text-orange-600 dark:text-orange-400 font-bold">{formatCurrency(day.revenue)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-bold tabular-nums text-emphasis dark:text-primary">{formatCurrency(day.revenue)}</td>
                     <td className="px-4 py-3 text-sm text-right text-gray-600 dark:text-gray-400">{day.orders}</td>
                   </tr>
                 ))}
@@ -206,7 +211,7 @@ export default function CashierHistory() {
       {/* Recent Completed Orders (local) */}
       <div>
         <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-3">
-          <History className="w-5 h-5" />
+          <History aria-hidden="true" className="w-5 h-5" />
           Recent Orders / 近期订单
         </h2>
 
@@ -217,27 +222,27 @@ export default function CashierHistory() {
         ) : (
           <div className="space-y-3">
             {completedOrders.slice(0, 20).map(order => (
-              <div key={order.local_order_id} className="bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-sm border-l-4 border-l-green-500 border-y border-r border-gray-100 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex-1">
+              <div key={order.local_order_id} className="flex min-w-0 flex-col justify-between gap-4 rounded-xl border-y border-r border-l-4 border-gray-100 border-l-green-500 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:flex-row sm:items-center">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{order.order_id}</span>
                     <span className="text-sm font-bold text-gray-900 dark:text-white">
                       {order.order_type === 'Dine-in' ? `Table ${order.table_no}` : 'Takeaway'}
                     </span>
                     {order.payment_method && (
-                      <span className="text-[10px] bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded-full uppercase font-bold">
+                      <span className="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold uppercase text-green-700 dark:bg-green-900/30 dark:text-green-400">
                         {paymentMethodLabel(order.payment_method)}
                       </span>
                     )}
                     {order.synced && (
-                      <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-1.5 py-0.5 rounded uppercase font-bold">Synced</span>
+                      <span className="whitespace-nowrap rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Synced</span>
                     )}
                   </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-1">{order.items_summary}</p>
                 </div>
                 <div className="flex items-center justify-between sm:flex-col sm:items-end gap-1 border-t sm:border-t-0 border-gray-100 dark:border-zinc-800 pt-3 sm:pt-0">
                   <span className="text-xs text-gray-400">{order.timestamp}</span>
-                  <span className="font-bold text-gray-900 dark:text-white">{formatCurrency(order.total_amount)}</span>
+                  <span className="font-bold tabular-nums text-emphasis dark:text-primary">{formatCurrency(order.total_amount)}</span>
                 </div>
               </div>
             ))}

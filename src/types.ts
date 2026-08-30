@@ -5,35 +5,40 @@ export interface LocalizedString {
   zh: string;
 }
 
+export interface ItemVariation {
+  id: string;
+  name: LocalizedString;
+  price: number;
+}
+
 export interface MenuItem {
   id: string;
   name: LocalizedString;
   basePrice: number;
   image: string;
+  sizes: ItemVariation[];
+  noodleBases: ItemVariation[];
+  addOns: ItemVariation[];
 }
 
+// Keeping old string union types for backward compatibility on historical orders
 export type SizeOption = 'Small' | 'Big';
-
-export type NoodleOption = 
-  | 'Yellow Noodle' 
-  | 'Bee Hoon' 
-  | 'Kuey Teow' 
-  | 'Rat Noodle' 
-  | 'Hakka Mee' 
-  | 'Wanton Mee';
-
-export type AddOnOption = 
-  | 'Fried Fu Chok' 
-  | 'Fish Cake' 
-  | 'Extra Fishball' 
-  | 'Add Egg';
+export type NoodleOption = 'Yellow Noodle' | 'Bee Hoon' | 'Kuey Teow' | 'Rat Noodle' | 'Hakka Mee' | 'Wanton Mee';
+export type AddOnOption = 'Fried Fu Chok' | 'Fish Cake' | 'Extra Fishball' | 'Add Egg';
 
 export interface CartItem {
-  id: string; // unique cart item id
+  id: string;
   menuItemId: string;
-  size: SizeOption;
-  noodleBases: NoodleOption[];
-  addOns: AddOnOption[];
+
+  sizeId: string;
+  size?: SizeOption; // legacy
+
+  noodleBaseIds: string[];
+  noodleBases?: NoodleOption[]; // legacy
+
+  addOnIds: string[];
+  addOns?: AddOnOption[]; // legacy
+
   quantity: number;
   unitPrice: number;
   totalPrice: number;
@@ -45,14 +50,19 @@ export type PaymentMethod = 'Cash' | 'QR Pay';
 
 export interface Order {
   local_order_id: string;
-  order_id: string; // e.g. JH-2046
-  timestamp: string; // YYYY-MM-DD HH:mm:ss
+  order_id: string;
+  timestamp: string;
   order_type: OrderType;
   table_no?: string;
   items_summary: string;
   items: CartItem[];
   total_qty: number;
+
+  subtotal?: number;
+  tax_amount?: number;
+  takeaway_fee?: number;
   total_amount: number;
+
   status: OrderStatus;
   paid: boolean;
   payment_method?: PaymentMethod;
@@ -77,4 +87,7 @@ export interface ShopSettings {
   coverPhoto: string;
   qrImage: string | null;
   menuItems: MenuItem[];
+  enableTax: boolean;
+  taxRate: number;
+  takeawayFee: number;
 }

@@ -33,8 +33,13 @@ export default function KitchenDisplay() {
   const [, setTick] = useState(0);
   const prevCountRef = useRef(0);
 
-  // Show both Pending and Preparing orders — kitchen needs to see all active orders
-  const activeOrders = orders.filter(o => o.status === 'Pending' || o.status === 'Preparing');
+  const activeOrders = [...orders]
+    .filter(o => o.status === 'Pending' || o.status === 'Preparing')
+    .sort((a, b) => {
+      const timeA = new Date(a.timestamp.replace(' ', 'T')).getTime();
+      const timeB = new Date(b.timestamp.replace(' ', 'T')).getTime();
+      return timeA - timeB; // Oldest first
+    });
 
   // Tick every second to update elapsed time
   useEffect(() => {
@@ -52,36 +57,36 @@ export default function KitchenDisplay() {
 
   if (activeOrders.length === 0) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-8">
+      <div className="min-h-dvh bg-zinc-950 flex flex-col items-center justify-center p-8">
         <div className="w-32 h-32 bg-zinc-900 rounded-full flex items-center justify-center mb-8 border-2 border-zinc-800">
-          <ChefHat className="w-16 h-16 text-zinc-600" />
+          <ChefHat className="w-16 h-16 text-primary" />
         </div>
         <h1 className="text-4xl font-extrabold text-zinc-400 mb-4">Waiting for Orders</h1>
-        <p className="text-xl text-zinc-600">等待新订单...</p>
+        <p className="text-xl text-zinc-400">等待新订单...</p>
         <div className="mt-8 flex items-center gap-3">
           <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-zinc-500 font-medium">Kitchen Display Active / 后厨看板已连线</span>
+          <span className="text-zinc-400 font-medium">Kitchen Display Active / 后厨看板已连线</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 p-4 lg:p-6">
+    <div className="min-h-dvh bg-zinc-950 p-4 lg:p-6">
       {/* KDS Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="pt-safe flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
-          <ChefHat className="w-8 h-8 text-orange-500" />
+          <ChefHat className="w-8 h-8 text-primary" />
           <div>
             <h1 className="text-2xl font-extrabold text-white">Kitchen Display / 后厨看板</h1>
-            <p className="text-zinc-500 text-sm font-medium">
-              {activeOrders.length} order{activeOrders.length > 1 ? 's' : ''} active / 进行中
+            <p className="text-zinc-400 text-sm font-medium">
+              <span aria-live="polite">{activeOrders.length} order{activeOrders.length > 1 ? 's' : ''} active / 进行中</span>
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-zinc-500 text-sm font-medium">LIVE</span>
+          <span className="text-zinc-400 text-sm font-medium">LIVE</span>
         </div>
       </div>
 
@@ -99,7 +104,7 @@ export default function KitchenDisplay() {
                 isUrgent
                   ? 'border-red-500/60 shadow-lg shadow-red-500/10'
                   : isPending
-                    ? 'border-orange-500/50 shadow-lg shadow-orange-500/10'
+                    ? 'border-primary/60 shadow-lg shadow-black/30'
                     : 'border-zinc-800'
               }`}
             >
@@ -111,16 +116,16 @@ export default function KitchenDisplay() {
                     <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase ${
                       order.order_type === 'Dine-in'
                         ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                        : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                        : 'bg-zinc-700 text-zinc-100 border border-zinc-600'
                     }`}>
-                      {order.order_type === 'Dine-in' ? `🪑 Table ${order.table_no}` : '🛍️ Takeaway'}
+                      {order.order_type === 'Dine-in' ? `Table ${order.table_no}` : 'Takeaway'}
                     </span>
                     <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase ${
                       isPending
-                        ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                        ? 'bg-primary text-on-primary border border-primary'
                         : 'bg-green-500/20 text-green-400 border border-green-500/30'
                     }`}>
-                      {isPending ? '⏳ 未付款 Unpaid' : '✅ 已付款 Paid'}
+                      {isPending ? '未付款 Unpaid' : '已付款 Paid'}
                     </span>
                   </div>
                 </div>
@@ -138,9 +143,17 @@ export default function KitchenDisplay() {
                   <ul className="space-y-4">
                     {order.items.map((item, idx) => {
                       const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
-                      const sizeName = SIZES.find(s => s.id === item.size)?.name.zh;
-                      const noodles = item.noodleBases.map(n => NOODLE_BASES.find(nb => nb.id === n)?.name.zh).join('+');
-                      const addons = item.addOns.map(a => ADD_ONS.find(ao => ao.id === a)?.name.zh);
+                      const sizeName = item.sizeId
+                        ? menuItem?.sizes.find(s => s.id === item.sizeId)?.name.zh || ''
+                        : SIZES.find(s => s.id === (item.size as any))?.name.zh;
+                      const noodlesArr = item.noodleBaseIds
+                        ? item.noodleBaseIds.map(n => menuItem?.noodleBases.find(nb => nb.id === n)?.name.zh)
+                        : (item.noodleBases || []).map(n => NOODLE_BASES.find(nb => nb.id === (n as any))?.name.zh);
+                      const noodles = noodlesArr.filter(Boolean).join('+');
+                      const addonsArr = item.addOnIds
+                        ? item.addOnIds.map(a => menuItem?.addOns.find(ao => ao.id === a)?.name.zh)
+                        : (item.addOns || []).map(a => ADD_ONS.find(ao => ao.id === (a as any))?.name.zh);
+                      const addons = addonsArr.filter(Boolean);
                       return (
                         <li key={idx} className="border-b border-zinc-800/50 pb-3 last:border-0 last:pb-0">
                           <div className="flex items-start justify-between">
@@ -152,7 +165,7 @@ export default function KitchenDisplay() {
                                 {sizeName} · {noodles}
                               </p>
                               {addons.length > 0 && (
-                                <p className="text-lg text-orange-400 font-bold mt-1">
+                                <p className="text-lg text-primary font-bold mt-1">
                                   + {addons.join(', ')}
                                 </p>
                               )}
@@ -171,6 +184,7 @@ export default function KitchenDisplay() {
 
               {/* Complete Button */}
               <button
+                type="button"
                 onClick={() => updateOrderStatus(order.local_order_id, 'Completed')}
                 className={`w-full py-6 font-extrabold text-2xl flex items-center justify-center gap-3 transition-all active:scale-[0.98] ${
                   isUrgent
@@ -178,7 +192,7 @@ export default function KitchenDisplay() {
                     : 'bg-green-600 hover:bg-green-700 text-white'
                 }`}
               >
-                <CheckCircle className="w-8 h-8" />
+                <CheckCircle aria-hidden="true" className="w-8 h-8" />
                 出餐完成 / Done
               </button>
             </div>

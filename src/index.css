@@ -1,13 +1,79 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #e4602f;
-  --color-background-light: #f8f6f6;
-  --color-background-dark: #211511;
-  --font-display: "Plus Jakarta Sans", sans-serif;
+  --color-brand: #7a1020;
+  --color-brand-foreground: #ffd43b;
+  --color-primary: #ffd43b;
+  --color-primary-hover: #f4c400;
+  --color-on-primary: #18181b;
+  --color-emphasis: #a16207;
+  --color-emphasis-dark: #ffd43b;
+  --color-background-light: #ffffff;
+  --color-background-dark: #09090b;
+  --color-surface-light: #f7f7f5;
+  --color-surface-dark: #18181b;
+  --font-display: "Segoe UI Variable", "Segoe UI", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+html {
+  min-height: 100%;
+  color-scheme: light dark;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
+  min-height: 100%;
+  margin: 0;
+  background: #f4f4f5;
   font-family: var(--font-display);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']) {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 3px solid #a16207;
+  outline-offset: 3px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :focus-visible {
+    outline-color: #ffd43b;
+  }
+}
+
+.pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

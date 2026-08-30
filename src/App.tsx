@@ -12,30 +12,26 @@ import KitchenDisplay from './components/KitchenDisplay';
 import AdminLogin from './components/AdminLogin';
 import { StoreProvider } from './store';
 
-type Route = 'landing' | 'order' | 'cashier' | 'kitchen';
+type Route = 'landing' | 'order' | 'checkout' | 'cashier' | 'kitchen';
 
 function getRouteFromHash(): Route {
   const hash = window.location.hash;
   if (hash.startsWith('#/cashier')) return 'cashier';
   if (hash.startsWith('#/kitchen')) return 'kitchen';
+  if (hash.startsWith('#/order/checkout')) return 'checkout';
   if (hash.startsWith('#/order')) return 'order';
   return 'landing';
 }
 
 export default function App() {
   const [route, setRoute] = useState<Route>(getRouteFromHash);
-  const [orderSubView, setOrderSubView] = useState<'home' | 'checkout'>('home');
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => {
     return sessionStorage.getItem('golden_sea_admin_auth') === 'true';
   });
 
   useEffect(() => {
     const handleHashChange = () => {
-      const newRoute = getRouteFromHash();
-      setRoute(newRoute);
-      if (newRoute === 'order') {
-        setOrderSubView('home');
-      }
+      setRoute(getRouteFromHash());
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
@@ -44,6 +40,16 @@ export default function App() {
   const handleAdminLogin = () => {
     setIsAdminAuthenticated(true);
   };
+
+  if (route === 'landing') {
+    return (
+      <LandingPage
+        onStart={() => { window.location.hash = '#/order'; }}
+        onAdmin={() => { window.location.hash = '#/cashier'; }}
+        onKitchen={() => { window.location.hash = '#/kitchen'; }}
+      />
+    );
+  }
 
   const handleAdminLogout = () => {
     sessionStorage.removeItem('golden_sea_admin_auth');
@@ -58,7 +64,7 @@ export default function App() {
     }
     return (
       <StoreProvider>
-        <div className="min-h-screen bg-gray-100 dark:bg-zinc-950 font-display text-slate-900 dark:text-slate-100">
+        <div className="min-h-dvh bg-zinc-100 dark:bg-black font-display text-slate-900 dark:text-slate-100">
           <CashierLayout onLogout={handleAdminLogout} />
         </div>
       </StoreProvider>
@@ -72,40 +78,28 @@ export default function App() {
     }
     return (
       <StoreProvider>
-        <div className="min-h-screen bg-zinc-950 font-display text-slate-100">
+        <div className="min-h-dvh bg-black font-display text-slate-100">
           <KitchenDisplay />
         </div>
       </StoreProvider>
     );
   }
 
-  // Mobile-friendly customer/order flow — NO login required
+  // Mobile-friendly customer/order flow — no login required.
   return (
     <StoreProvider>
-      <div className="min-h-screen bg-gray-100 dark:bg-zinc-950 font-display text-slate-900 dark:text-slate-100 flex justify-center">
-        <div className="w-full max-w-md bg-background-light dark:bg-background-dark min-h-screen shadow-2xl relative overflow-hidden">
-          {route === 'landing' && (
-            <LandingPage
-              onStart={() => {
-                window.location.hash = '#/order';
-                setOrderSubView('home');
-              }}
-              onAdmin={() => {
-                window.location.hash = '#/cashier';
-              }}
-            />
-          )}
-
-          {route === 'order' && orderSubView === 'home' && (
+      <div className="min-h-dvh bg-zinc-100 dark:bg-black font-display text-slate-900 dark:text-slate-100 flex justify-center">
+        <div className="w-full max-w-md bg-background-light dark:bg-background-dark min-h-dvh shadow-2xl relative overflow-x-hidden">
+          {route === 'order' && (
             <CustomerHome
               onBack={() => { window.location.hash = ''; }}
-              onCheckout={() => setOrderSubView('checkout')}
+              onCheckout={() => { window.location.hash = '#/order/checkout'; }}
             />
           )}
 
-          {route === 'order' && orderSubView === 'checkout' && (
+          {route === 'checkout' && (
             <CustomerCheckout
-              onBack={() => setOrderSubView('home')}
+              onBack={() => { window.location.hash = '#/order'; }}
             />
           )}
         </div>

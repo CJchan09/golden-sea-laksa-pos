@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react';
-import { Lock, Eye, EyeOff, Store, KeyRound, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Lock, Eye, EyeOff } from 'lucide-react';
+import { APP_ICON_SRC } from '../brand';
 
 interface Props {
   onLogin: () => void;
@@ -17,13 +18,6 @@ export default function AdminLogin({ onLogin }: Props) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isShaking, setIsShaking] = useState(false);
-  // Forget password state
-  const [showForgotPw, setShowForgotPw] = useState(false);
-  const [oldPw, setOldPw] = useState('');
-  const [newPw1, setNewPw1] = useState('');
-  const [newPw2, setNewPw2] = useState('');
-  const [pwMsg, setPwMsg] = useState('');
-  const [pwSuccess, setPwSuccess] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,54 +31,24 @@ export default function AdminLogin({ onLogin }: Props) {
     }
   };
 
-  const handleChangePassword = () => {
-    setPwMsg('');
-    setPwSuccess(false);
-    if (oldPw !== getAdminPassword()) {
-      setPwMsg('旧密码错误 / Old password is wrong');
-      return;
-    }
-    if (!newPw1 || newPw1.length < 4) {
-      setPwMsg('新密码至少4位 / New password must be at least 4 chars');
-      return;
-    }
-    if (newPw1 !== newPw2) {
-      setPwMsg('两次输入不一致 / Passwords do not match');
-      return;
-    }
-    localStorage.setItem(PASSWORD_KEY, newPw1);
-    setPwMsg('密码已更新 / Password updated!');
-    setPwSuccess(true);
-    setOldPw('');
-    setNewPw1('');
-    setNewPw2('');
-    setTimeout(() => {
-      setShowForgotPw(false);
-      setPwMsg('');
-      setPwSuccess(false);
-    }, 1500);
-  };
-
   // ---- Main Login View ----
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 flex items-center justify-center p-4">
+    <div className="min-h-dvh bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 flex items-center justify-center p-4">
       <div
         className={`w-full max-w-sm transition-transform ${isShaking ? 'animate-shake' : ''}`}
         style={isShaking ? { animation: 'shake 0.5s ease-in-out' } : {}}
       >
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-2xl shadow-orange-500/20">
-            <Store className="w-10 h-10 text-white" />
-          </div>
-          <h1 className="text-2xl font-extrabold text-white mb-1">Golden Sea Laksa</h1>
-          <p className="text-zinc-500 text-sm font-medium">Staff Login / 员工登录</p>
+          <img src={APP_ICON_SRC} alt="CJ F&B POS app icon" className="mx-auto mb-4 h-20 w-20 rounded-2xl object-cover shadow-2xl shadow-black/30" />
+          <h1 className="text-2xl font-extrabold text-white mb-1">CJ F&amp;B POS</h1>
+          <p className="text-zinc-300 text-sm font-medium">Staff Login / 员工登录</p>
         </div>
 
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-bold text-zinc-400 mb-2">
+            <label htmlFor="staff-password" className="block text-sm font-bold text-zinc-300 mb-2">
               Password / 密码
             </label>
             <div className="relative">
@@ -92,6 +56,8 @@ export default function AdminLogin({ onLogin }: Props) {
                 <Lock className="w-5 h-5 text-zinc-500" />
               </div>
               <input
+                id="staff-password"
+                name="staff-password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => {
@@ -99,44 +65,38 @@ export default function AdminLogin({ onLogin }: Props) {
                   setError('');
                 }}
                 placeholder="Enter password"
-                className="w-full bg-zinc-800/80 border border-zinc-700 rounded-xl pl-12 pr-12 py-4 text-white text-lg font-medium focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all placeholder:text-zinc-600"
+                className="w-full bg-zinc-800/80 border border-zinc-700 rounded-xl pl-12 pr-12 py-4 text-white text-lg font-medium focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-zinc-500"
+                autoComplete="current-password"
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? 'staff-password-error' : 'staff-access-note'}
                 autoFocus
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-zinc-400 hover:bg-white/5 hover:text-white transition-colors"
               >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                {showPassword ? <EyeOff className="w-5 h-5" aria-hidden="true" /> : <Eye className="w-5 h-5" aria-hidden="true" />}
               </button>
             </div>
             {error && (
-              <p className="text-red-400 text-sm font-medium mt-2 flex items-center gap-1">
-                ⚠️ {error}
+              <p id="staff-password-error" role="alert" className="text-red-300 text-sm font-medium mt-2 flex items-center gap-1">
+                {error}
               </p>
             )}
           </div>
 
           <button
             type="submit"
-            className="w-full py-4 bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-bold rounded-xl transition-all text-lg shadow-lg shadow-orange-500/20 active:scale-[0.98]"
+            className="w-full py-4 bg-primary hover:bg-primary-hover text-on-primary font-bold rounded-xl transition-colors text-lg shadow-lg shadow-black/25 active:scale-[0.98]"
           >
             Login / 登录
           </button>
         </form>
 
-        {/* Bottom Links */}
-        <div className="mt-6 flex flex-col gap-2">
-          <button
-            onClick={() => setShowForgotPw(true)}
-            className="text-center text-zinc-500 hover:text-orange-400 text-sm font-medium transition-colors"
-          >
-            🔑 Forget Password / 忘记密码
-          </button>
-        </div>
-
-        <p className="text-center text-zinc-600 text-xs mt-6">
-          Golden Sea Laksa POS System
+        <p id="staff-access-note" className="text-center text-zinc-400 text-xs leading-5 mt-6">
+          Local device access only · 本机入口，不是 Cloud 安全账号
         </p>
       </div>
 

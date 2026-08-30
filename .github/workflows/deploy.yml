@@ -33,8 +33,6 @@ jobs:
         run: npm run build
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
-          VITE_GAS_URL: ${{ secrets.VITE_GAS_URL }}
-          VITE_SHEET_URL: ${{ secrets.VITE_SHEET_URL }}
 
       - uses: actions/configure-pages@v4
 

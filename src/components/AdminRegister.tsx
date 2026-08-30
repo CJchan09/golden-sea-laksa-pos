@@ -1,27 +1,55 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
-import { MENU_ITEMS } from '../constants';
-import { MenuItem, OrderType } from '../types';
+import { PaymentMethod, MenuItem, OrderType } from '../types';
 import { formatCurrency } from '../utils';
 import CustomizationModal from './CustomizationModal';
-import { ShoppingCart, Trash2 } from 'lucide-react';
+import { ShoppingCart, Trash2, Banknote, QrCode } from 'lucide-react';
 
 export default function AdminRegister() {
-  const { language, cart, addToCart, removeFromCart, clearCart, submitOrder } = useStore();
+  const { language, cart, addToCart, removeFromCart, clearCart, submitOrder, markAsPaid, settings } = useStore();
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [orderType, setOrderType] = useState<OrderType>('Dine-in');
   const [tableNo, setTableNo] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | 'Unpaid' | null>(null);
+  const [showQR, setShowQR] = useState(false);
+  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
 
-  const totalAmount = cart.reduce((sum, item) => sum + item.totalPrice, 0);
+  const subtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
+  const takeawayFee = orderType === 'Takeaway' ? (settings.takeawayFee || 0) : 0;
+  const taxAmount = settings.enableTax ? parseFloat(((subtotal + takeawayFee) * (settings.taxRate / 100)).toFixed(2)) : 0;
+  const totalAmount = subtotal + takeawayFee + taxAmount;
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (cart.length === 0) return;
     if (orderType === 'Dine-in' && !tableNo.trim()) {
       alert('Please enter a table number.');
       return;
     }
-    submitOrder(orderType, tableNo);
+    if (!paymentMethod) {
+      alert('Please select a payment method.');
+      return;
+    }
+
+    const newOrderId = await submitOrder(orderType, tableNo);
+    if (newOrderId) {
+      if (paymentMethod === 'Cash') {
+        markAsPaid(newOrderId, 'Cash');
+        alert('Order placed & paid with Cash.');
+        resetForm();
+      } else if (paymentMethod === 'QR Pay') {
+        setCurrentOrderId(newOrderId);
+        setShowQR(true);
+      } else {
+        alert('Order placed. Awaiting payment.');
+        resetForm();
+      }
+    }
+  };
+
+  const resetForm = () => {
     setTableNo('');
+    setPaymentMethod(null);
+    setCurrentOrderId(null);
   };
 
   return (
@@ -30,7 +58,7 @@ export default function AdminRegister() {
       <div className="flex-1">
         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Register</h2>
         <div className="grid grid-cols-2 gap-4">
-          {MENU_ITEMS.map(item => (
+          {settings.menuItems.map(item => (
             <button
               key={item.id}
               onClick={() => setSelectedItem(item)}
@@ -74,7 +102,7 @@ export default function AdminRegister() {
             </div>
           ) : (
             cart.map(item => {
-              const menuItem = MENU_ITEMS.find(m => m.id === item.menuItemId);
+              const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
               return (
                 <div key={item.id} className="flex justify-between items-start pb-4 border-b border-gray-100 dark:border-zinc-800 last:border-0 last:pb-0">
                   <div className="flex-1 pr-2">
@@ -124,9 +152,57 @@ export default function AdminRegister() {
             />
           )}
 
-          <div className="flex justify-between items-center mb-4">
-            <span className="font-bold text-gray-900 dark:text-white">Total</span>
-            <span className="text-xl font-extrabold text-orange-600 dark:text-orange-500">{formatCurrency(totalAmount)}</span>
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            <button
+              onClick={() => setPaymentMethod('Cash')}
+              className={`flex flex-col items-center justify-center p-2 rounded-lg border-2 transition-colors ${
+                paymentMethod === 'Cash' ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400' : 'border-gray-200 dark:border-zinc-800 text-gray-500 hover:border-green-500/50'
+              }`}
+            >
+              <Banknote className="w-5 h-5 mb-1" />
+              <span className="text-xs font-bold">Cash</span>
+            </button>
+            <button
+              onClick={() => setPaymentMethod('QR Pay')}
+              className={`flex flex-col items-center justify-center p-2 rounded-lg border-2 transition-colors ${
+                paymentMethod === 'QR Pay' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' : 'border-gray-200 dark:border-zinc-800 text-gray-500 hover:border-blue-500/50'
+              }`}
+            >
+              <QrCode className="w-5 h-5 mb-1" />
+              <span className="text-xs font-bold">QR</span>
+            </button>
+            <button
+              onClick={() => setPaymentMethod('Unpaid')}
+              className={`flex flex-col items-center justify-center p-2 rounded-lg border-2 transition-colors ${
+                paymentMethod === 'Unpaid' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400' : 'border-gray-200 dark:border-zinc-800 text-gray-500 hover:border-orange-500/50'
+              }`}
+            >
+              <span className="text-xl leading-none mb-1">⏳</span>
+              <span className="text-xs font-bold">Later</span>
+            </button>
+          </div>
+
+          <div className="space-y-2 mb-4">
+            <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-400">
+              <span>Subtotal</span>
+              <span>{formatCurrency(subtotal)}</span>
+            </div>
+            {orderType === 'Takeaway' && settings.takeawayFee > 0 && (
+              <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-400">
+                <span>Takeaway Fee</span>
+                <span>{formatCurrency(takeawayFee)}</span>
+              </div>
+            )}
+            {settings.enableTax && (
+              <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-400">
+                <span>Tax ({settings.taxRate}%)</span>
+                <span>{formatCurrency(taxAmount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center font-bold text-gray-900 dark:text-white pt-2 border-t border-gray-200 dark:border-zinc-700">
+              <span>Total</span>
+              <span className="text-xl font-extrabold text-orange-600 dark:text-orange-500">{formatCurrency(totalAmount)}</span>
+            </div>
           </div>
 
           <button
@@ -146,6 +222,45 @@ export default function AdminRegister() {
           onClose={() => setSelectedItem(null)}
           onAdd={addToCart}
         />
+      )}
+
+      {showQR && settings.qrImage && currentOrderId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl relative">
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-2">
+              QR Payment
+            </h3>
+            <p className="text-center text-gray-500 dark:text-gray-400 text-sm mb-6">
+              Please present this QR code to the customer to scan and pay <strong className="text-gray-900 dark:text-white">{formatCurrency(totalAmount)}</strong>
+            </p>
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border-2 border-blue-100 dark:border-blue-900/50 mb-6 flex justify-center">
+              <img src={settings.qrImage} alt="QR Payment" className="max-w-[220px] w-full rounded-lg shadow-sm" />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowQR(false);
+                  alert('Order placed. Awaiting payment confirmation.');
+                  resetForm();
+                }}
+                className="flex-1 bg-gray-200 hover:bg-gray-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-300 font-bold py-3 rounded-xl transition-colors"
+              >
+                Verify Later
+              </button>
+              <button
+                onClick={() => {
+                  markAsPaid(currentOrderId, 'QR Pay');
+                  setShowQR(false);
+                  alert('Payment verified and order placed.');
+                  resetForm();
+                }}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg transition-transform active:scale-[0.98]"
+              >
+                Confirm Paid
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

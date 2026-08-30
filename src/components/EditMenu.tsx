@@ -7,13 +7,17 @@ import { v4 as uuidv4 } from 'uuid';
 
 export default function EditMenu() {
   const { language, settings, updateSettings } = useStore();
-  
+
   const [shopNameEn, setShopNameEn] = useState(settings.shopNameEn);
   const [shopNameZh, setShopNameZh] = useState(settings.shopNameZh);
   const [coverPhoto, setCoverPhoto] = useState(settings.coverPhoto);
   const [qrPreview, setQrPreview] = useState<string | null>(settings.qrImage);
   const [menuItems, setMenuItems] = useState<MenuItem[]>(JSON.parse(JSON.stringify(settings.menuItems)));
   
+  const [enableTax, setEnableTax] = useState(settings.enableTax);
+  const [taxRate, setTaxRate] = useState(settings.taxRate);
+  const [takeawayFee, setTakeawayFee] = useState(settings.takeawayFee);
+
   const qrInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   
@@ -24,7 +28,10 @@ export default function EditMenu() {
       shopNameZh,
       coverPhoto,
       qrImage: qrPreview,
-      menuItems
+      menuItems,
+      enableTax,
+      taxRate,
+      takeawayFee
     });
     alert(language === 'en' ? 'Settings saved successfully!' : '设置保存成功！');
   };
@@ -34,9 +41,42 @@ export default function EditMenu() {
       id: uuidv4(),
       name: { en: 'New Item', zh: '新商品' },
       basePrice: 0.00,
-      image: ''
+      image: '',
+      sizes: [],
+      noodleBases: [],
+      addOns: []
     };
     setMenuItems([...menuItems, newItem]);
+  };
+
+  const handleVariationUpdate = (menuId: string, type: 'sizes' | 'noodleBases' | 'addOns', varId: string, field: 'nameEn' | 'nameZh' | 'price', value: string | number) => {
+    setMenuItems(prev => prev.map(m => {
+      if (m.id !== menuId) return m;
+      return {
+        ...m,
+        [type]: m[type].map((v: any) => {
+          if (v.id !== varId) return v;
+          if (field === 'nameEn') return { ...v, name: { ...v.name, en: value } };
+          if (field === 'nameZh') return { ...v, name: { ...v.name, zh: value } };
+          return { ...v, [field]: value };
+        })
+      };
+    }));
+  };
+
+  const handleAddVariation = (menuId: string, type: 'sizes' | 'noodleBases' | 'addOns') => {
+    setMenuItems(prev => prev.map(m => {
+      if (m.id !== menuId) return m;
+      const newVar = { id: uuidv4(), name: { en: 'New', zh: '新选项' }, price: 0 };
+      return { ...m, [type]: m[type] ? [...m[type], newVar] : [newVar] };
+    }));
+  };
+
+  const handleRemoveVariation = (menuId: string, type: 'sizes' | 'noodleBases' | 'addOns', varId: string) => {
+    setMenuItems(prev => prev.map(m => {
+      if (m.id !== menuId) return m;
+      return { ...m, [type]: m[type].filter((v: any) => v.id !== varId) };
+    }));
   };
 
   const handleUpdateMenuItem = (id: string, field: string, value: string | number) => {
@@ -71,17 +111,18 @@ export default function EditMenu() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-32">
-      <div className="flex justify-between items-center bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border border-orange-100 dark:border-zinc-800">
+      <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-zinc-800">
         <div>
           <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
-            <Store className="w-6 h-6 text-orange-600" />
+            <Store className="w-6 h-6 text-emphasis dark:text-primary" />
             Store Settings / 门店设置
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Configure your menu, shop name, and payment QR.</p>
         </div>
         <button
+          type="button"
           onClick={handleSave}
-          className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg shadow-orange-600/20 active:scale-[0.98]"
+          className="min-h-11 flex items-center justify-center gap-2 bg-primary hover:bg-primary-hover text-on-primary font-bold py-3 px-6 rounded-xl transition-all shadow-sm active:scale-[0.98]"
         >
           <Save className="w-5 h-5" />
           Save Changes / 保存更改
@@ -99,7 +140,7 @@ export default function EditMenu() {
               type="text"
               value={shopNameEn}
               onChange={e => setShopNameEn(e.target.value)}
-              className="w-full bg-gray-50 dark:bg-zinc-800 border-2 border-transparent focus:border-orange-500 rounded-xl px-4 py-2.5 outline-none font-medium dark:text-white transition-colors"
+              className="w-full min-h-11 bg-gray-50 dark:bg-zinc-800 border-2 border-transparent focus:border-emphasis dark:focus:border-primary rounded-xl px-4 py-2.5 outline-none font-medium dark:text-white transition-colors"
             />
           </div>
           <div>
@@ -108,8 +149,43 @@ export default function EditMenu() {
               type="text"
               value={shopNameZh}
               onChange={e => setShopNameZh(e.target.value)}
-              className="w-full bg-gray-50 dark:bg-zinc-800 border-2 border-transparent focus:border-orange-500 rounded-xl px-4 py-2.5 outline-none font-medium dark:text-white transition-colors"
+              className="w-full min-h-11 bg-gray-50 dark:bg-zinc-800 border-2 border-transparent focus:border-emphasis dark:focus:border-primary rounded-xl px-4 py-2.5 outline-none font-medium dark:text-white transition-colors"
             />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-gray-100 dark:border-zinc-800">
+            <div>
+              <label className="flex items-center gap-2 cursor-pointer mb-2">
+                <input
+                  type="checkbox"
+                  checked={enableTax}
+                  onChange={e => setEnableTax(e.target.checked)}
+                  className="w-5 h-5 accent-primary rounded bg-gray-100 border-gray-300 focus:ring-emphasis dark:focus:ring-primary dark:bg-zinc-800 dark:border-zinc-600"
+                />
+                <span className="text-sm font-bold text-gray-700 dark:text-gray-300">Enable Tax / 开启税务</span>
+              </label>
+              {enableTax && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={taxRate}
+                    onChange={e => setTaxRate(parseFloat(e.target.value) || 0)}
+                    className="w-24 min-h-11 bg-gray-50 dark:bg-zinc-800 border-2 border-transparent focus:border-emphasis dark:focus:border-primary rounded-xl px-3 py-2 outline-none font-medium dark:text-white transition-colors"
+                  />
+                  <span className="text-gray-500 font-bold">%</span>
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Takeaway Fee (RM) / 打包费</label>
+              <input
+                type="number"
+                step="0.10"
+                value={takeawayFee}
+                onChange={e => setTakeawayFee(parseFloat(e.target.value) || 0)}
+                className="w-full min-h-11 bg-gray-50 dark:bg-zinc-800 border-2 border-transparent focus:border-emphasis dark:focus:border-primary rounded-xl px-4 py-2.5 outline-none font-medium dark:text-white transition-colors"
+              />
+            </div>
           </div>
 
           <div>
@@ -118,6 +194,7 @@ export default function EditMenu() {
               <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-zinc-700">
                 <img src={coverPhoto} alt="Cover" className="w-full h-32 object-cover" />
                 <button
+                  type="button"
                   onClick={() => coverInputRef.current?.click()}
                   className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
                 >
@@ -126,8 +203,9 @@ export default function EditMenu() {
               </div>
             ) : (
               <button
+                type="button"
                 onClick={() => coverInputRef.current?.click()}
-                className="w-full h-32 border-2 border-dashed border-gray-300 dark:border-zinc-700 rounded-xl flex flex-col items-center justify-center text-gray-500 hover:border-orange-500 hover:text-orange-500 transition-colors"
+                className="w-full h-32 border-2 border-dashed border-gray-300 dark:border-zinc-700 rounded-xl flex flex-col items-center justify-center text-gray-500 hover:border-emphasis hover:text-emphasis dark:hover:border-primary dark:hover:text-primary transition-colors"
               >
                 <ImageIcon className="w-8 h-8 mb-2" />
                 <span className="font-bold text-sm">Upload Cover Photo</span>
@@ -150,15 +228,18 @@ export default function EditMenu() {
               <div className="relative bg-gray-50 dark:bg-zinc-950 p-4 rounded-xl border border-gray-100 dark:border-zinc-800">
                 <img src={qrPreview} alt="QR Code" className="w-full max-h-48 object-contain mx-auto rounded-lg" />
                 <button
+                  type="button"
                   onClick={() => setQrPreview(null)}
-                  className="absolute top-2 right-2 p-1.5 bg-red-500 rounded-full text-white hover:bg-red-600 transition-colors shadow-md"
+                  className="absolute top-2 right-2 min-h-11 min-w-11 flex items-center justify-center bg-red-600 rounded-full text-white hover:bg-red-700 transition-colors shadow-md"
                   title="Remove QR Code"
+                  aria-label={language === 'en' ? 'Remove QR code' : '移除收款二维码'}
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
             ) : (
               <button
+                type="button"
                 onClick={() => qrInputRef.current?.click()}
                 className="w-full h-48 border-2 border-dashed border-blue-200 dark:border-blue-900/50 hover:border-blue-500 dark:hover:border-blue-500 rounded-xl flex flex-col items-center justify-center text-blue-500 transition-colors bg-blue-50/50 dark:bg-blue-900/10"
               >
@@ -179,8 +260,9 @@ export default function EditMenu() {
             Menu Items / 菜单管理
           </h3>
           <button
+            type="button"
             onClick={handleAddMenuItem}
-            className="flex items-center gap-2 text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 dark:bg-orange-900/20 dark:hover:bg-orange-900/40 px-4 py-2 rounded-lg font-bold transition-colors text-sm"
+            className="min-h-11 flex items-center gap-2 text-on-primary bg-primary hover:bg-primary-hover px-4 py-2 rounded-lg font-bold transition-colors text-sm"
           >
             <Plus className="w-4 h-4" /> Add Item
           </button>
@@ -194,15 +276,17 @@ export default function EditMenu() {
                 {item.image ? (
                   <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-200 dark:border-zinc-700 group">
                     <img src={item.image} alt="Menu" className="w-full h-full object-cover" />
-                    <label className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                    <label className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer transition-opacity">
                       <ImageIcon className="w-6 h-6 text-white" />
-                      <input type="file" accept="image/*" className="hidden" onChange={e => handleImageUpload(e, 'menu', item.id)} />
+                      <span className="sr-only">Change menu item image</span>
+                      <input aria-label="Change menu item image" type="file" accept="image/*" className="hidden" onChange={e => handleImageUpload(e, 'menu', item.id)} />
                     </label>
                   </div>
                 ) : (
-                  <label className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 dark:border-zinc-700 flex items-center justify-center text-gray-400 hover:text-orange-500 hover:border-orange-500 cursor-pointer transition-colors bg-white dark:bg-zinc-900">
+                  <label className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 dark:border-zinc-700 flex items-center justify-center text-gray-400 hover:text-emphasis hover:border-emphasis dark:hover:text-primary dark:hover:border-primary cursor-pointer transition-colors bg-white dark:bg-zinc-900">
                     <ImageIcon className="w-8 h-8" />
-                    <input type="file" accept="image/*" className="hidden" onChange={e => handleImageUpload(e, 'menu', item.id)} />
+                    <span className="sr-only">Upload menu item image</span>
+                    <input aria-label="Upload menu item image" type="file" accept="image/*" className="hidden" onChange={e => handleImageUpload(e, 'menu', item.id)} />
                   </label>
                 )}
               </div>
@@ -214,7 +298,7 @@ export default function EditMenu() {
                     type="text"
                     value={item.name.en}
                     onChange={e => handleUpdateMenuItem(item.id, 'nameEn', e.target.value)}
-                    className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 focus:border-orange-500 rounded-lg px-3 py-2 outline-none text-sm dark:text-white"
+                    className="w-full min-h-11 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary rounded-lg px-3 py-2 outline-none text-sm dark:text-white"
                   />
                 </div>
                 <div>
@@ -223,7 +307,7 @@ export default function EditMenu() {
                     type="text"
                     value={item.name.zh}
                     onChange={e => handleUpdateMenuItem(item.id, 'nameZh', e.target.value)}
-                    className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 focus:border-orange-500 rounded-lg px-3 py-2 outline-none text-sm dark:text-white"
+                    className="w-full min-h-11 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary rounded-lg px-3 py-2 outline-none text-sm dark:text-white"
                   />
                 </div>
                 <div>
@@ -233,17 +317,78 @@ export default function EditMenu() {
                     step="0.10"
                     value={item.basePrice}
                     onChange={e => handleUpdateMenuItem(item.id, 'basePrice', parseFloat(e.target.value) || 0)}
-                    className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 focus:border-orange-500 rounded-lg px-3 py-2 outline-none text-sm dark:text-white"
+                    className="w-full min-h-11 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary rounded-lg px-3 py-2 outline-none text-sm dark:text-white"
                   />
                 </div>
                 <div className="flex items-end justify-end">
                   <button
+                    type="button"
                     onClick={() => handleRemoveMenuItem(item.id)}
-                    className="text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 p-2 rounded-lg transition-colors"
+                    className="min-h-11 min-w-11 flex items-center justify-center text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-950/40 dark:hover:bg-red-950/70 rounded-lg transition-colors"
                     title="Delete Item"
+                    aria-label={`Delete ${item.name.en || 'menu item'}`}
                   >
                     <Trash2 className="w-5 h-5" />
                   </button>
+                </div>
+
+                {/* Variations Sections */}
+                <div className="col-span-1 sm:col-span-2 grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4 border-t border-gray-100 dark:border-zinc-800 pt-4">
+                  {(['sizes', 'noodleBases', 'addOns'] as const).map(type => (
+                    <div key={type} className="space-y-2 bg-gray-50/50 dark:bg-zinc-950/50 p-3 rounded-xl border border-gray-100 dark:border-zinc-800">
+                      <div className="flex justify-between items-center bg-gray-200 dark:bg-zinc-800/80 px-3 py-2 rounded-lg">
+                        <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">
+                          {type === 'sizes' ? 'Sizes / 大小份' : type === 'noodleBases' ? 'Noodles / 面类' : 'Addons / 加料'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleAddVariation(item.id, type)}
+                          className="min-h-11 text-on-primary text-sm font-bold px-3 py-2 flex items-center gap-1 bg-primary hover:bg-primary-hover rounded shadow-sm"
+                          aria-label={`Add ${type} option to ${item.name.en || 'menu item'}`}
+                        >
+                          <Plus className="w-3 h-3" /> Add
+                        </button>
+                      </div>
+                      <div className="grid gap-2">
+                        {item[type]?.map((v: any) => (
+                          <div key={v.id} className="flex gap-2 items-center bg-white dark:bg-zinc-900 p-2 rounded-lg border border-gray-100 dark:border-zinc-800 shadow-sm">
+                            <input
+                              type="text"
+                              value={v.name.en}
+                              onChange={e => handleVariationUpdate(item.id, type, v.id, 'nameEn', e.target.value)}
+                              placeholder="EN"
+                              className="w-1/3 min-h-11 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary outline-none text-sm px-1 py-2 dark:text-white"
+                            />
+                            <input
+                              type="text"
+                              value={v.name.zh}
+                              onChange={e => handleVariationUpdate(item.id, type, v.id, 'nameZh', e.target.value)}
+                              placeholder="ZH"
+                              className="w-1/3 min-h-11 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary outline-none text-sm px-1 py-2 dark:text-white"
+                            />
+                            <div className="w-1/4 flex items-center gap-1">
+                              <span className="text-xs text-gray-400">+</span>
+                              <input
+                                type="number"
+                                step="0.50"
+                                value={v.price}
+                                onChange={e => handleVariationUpdate(item.id, type, v.id, 'price', parseFloat(e.target.value) || 0)}
+                                className="w-full min-h-11 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary outline-none text-sm px-1 py-2 dark:text-white text-right"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveVariation(item.id, type, v.id)}
+                              className="min-h-11 min-w-11 flex items-center justify-center text-gray-500 hover:text-red-600 bg-gray-50 dark:text-zinc-400 dark:bg-zinc-950 rounded hover:bg-red-50 dark:hover:bg-red-950/50"
+                              aria-label={`Remove ${v.name.en || type} option`}
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

@@ -6,7 +6,7 @@ import CustomizationModal from './CustomizationModal';
 import { ShoppingCart, Trash2, CreditCard, Banknote, X, QrCode } from 'lucide-react';
 
 export default function CashierRegister() {
-  const { language, cart, addToCart, removeFromCart, clearCart, submitOrder, markAsPaid, orders, settings } = useStore();
+  const { language, cart, addToCart, removeFromCart, clearCart, submitOrder, markAsPaid, settings } = useStore();
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [orderType, setOrderType] = useState<OrderType>('Dine-in');
   const [tableNo, setTableNo] = useState('');
@@ -42,9 +42,10 @@ export default function CashierRegister() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {settings.menuItems.map(item => (
             <button
+              type="button"
               key={item.id}
               onClick={() => setSelectedItem(item)}
-              className="flex flex-col text-left bg-white dark:bg-zinc-900 border-2 border-transparent hover:border-orange-200 dark:hover:border-orange-900/50 active:border-orange-500 active:scale-95 transition-all rounded-2xl shadow-sm overflow-hidden group"
+              className="group flex flex-col overflow-hidden rounded-2xl border-2 border-transparent bg-white text-left shadow-sm transition-all hover:border-primary/50 active:scale-95 active:border-primary dark:bg-zinc-900"
             >
               <div className="aspect-video w-full overflow-hidden">
                 <img 
@@ -60,7 +61,7 @@ export default function CashierRegister() {
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                   {item.name.zh}
                 </p>
-                <p className="text-orange-600 dark:text-orange-400 font-extrabold">
+                <p className="font-extrabold text-emphasis dark:text-primary">
                   {formatCurrency(item.basePrice)}
                 </p>
               </div>
@@ -73,11 +74,16 @@ export default function CashierRegister() {
       <div className="w-full lg:w-96 flex flex-col bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800 overflow-hidden lg:h-[calc(100vh-12rem)]">
         <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center bg-gray-50 dark:bg-zinc-950/50">
           <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5" />
+            <ShoppingCart aria-hidden="true" className="w-5 h-5" />
             Current Order / 当前订单
           </h3>
           {cart.length > 0 && (
-            <button onClick={clearCart} className="text-xs text-red-500 hover:text-red-600 font-bold uppercase tracking-wider">
+            <button
+              type="button"
+              onClick={clearCart}
+              aria-label="Clear current order / 清空当前订单"
+              className="-mr-2 min-h-11 rounded-lg px-3 text-xs font-bold uppercase tracking-wider text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/30 dark:hover:text-red-300"
+            >
               Clear
             </button>
           )}
@@ -86,7 +92,7 @@ export default function CashierRegister() {
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 py-12">
-              <ShoppingCart className="w-12 h-12 mb-2 opacity-50" />
+              <ShoppingCart aria-hidden="true" className="w-12 h-12 mb-2 opacity-50" />
               <p className="text-sm">Cart is empty / 购物车为空</p>
             </div>
           ) : (
@@ -102,8 +108,13 @@ export default function CashierRegister() {
                       Qty: {item.quantity} • {formatCurrency(item.totalPrice)}
                     </p>
                   </div>
-                  <button onClick={() => removeFromCart(item.id)} className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
-                    <Trash2 className="w-4 h-4" />
+                  <button
+                    type="button"
+                    onClick={() => removeFromCart(item.id)}
+                    aria-label={`Remove ${menuItem?.name[language] ?? 'item'} from order`}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/30 dark:hover:text-red-300"
+                  >
+                    <Trash2 aria-hidden="true" className="w-4 h-4" />
                   </button>
                 </div>
               );
@@ -114,17 +125,21 @@ export default function CashierRegister() {
         <div className="p-4 border-t border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-950/50">
           <div className="flex gap-2 mb-4">
             <button
+              type="button"
               onClick={() => setOrderType('Dine-in')}
-              className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-colors ${
-                orderType === 'Dine-in' ? 'bg-orange-600 text-white shadow-md' : 'bg-gray-200 dark:bg-zinc-800 text-gray-600 dark:text-gray-400'
+              aria-pressed={orderType === 'Dine-in'}
+              className={`min-h-11 flex-1 rounded-lg px-2 py-2.5 text-xs font-bold transition-colors ${
+                orderType === 'Dine-in' ? 'bg-primary text-on-primary shadow-md' : 'bg-gray-200 text-gray-700 dark:bg-zinc-800 dark:text-gray-300'
               }`}
             >
               堂食 Dine-in
             </button>
             <button
+              type="button"
               onClick={() => setOrderType('Takeaway')}
-              className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-colors ${
-                orderType === 'Takeaway' ? 'bg-orange-600 text-white shadow-md' : 'bg-gray-200 dark:bg-zinc-800 text-gray-600 dark:text-gray-400'
+              aria-pressed={orderType === 'Takeaway'}
+              className={`min-h-11 flex-1 rounded-lg px-2 py-2.5 text-xs font-bold transition-colors ${
+                orderType === 'Takeaway' ? 'bg-primary text-on-primary shadow-md' : 'bg-gray-200 text-gray-700 dark:bg-zinc-800 dark:text-gray-300'
               }`}
             >
               外带 Takeaway
@@ -137,21 +152,23 @@ export default function CashierRegister() {
               placeholder="Table No. / 桌号"
               value={tableNo}
               onChange={e => setTableNo(e.target.value)}
-              className="w-full mb-4 px-3 py-2.5 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg text-sm font-semibold focus:ring-2 focus:ring-orange-500 outline-none"
+              aria-label="Table number / 桌号"
+              className="w-full mb-4 px-3 py-2.5 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg text-sm font-semibold focus:ring-2 focus:ring-primary outline-none"
             />
           )}
 
           <div className="flex justify-between items-center mb-4">
             <span className="font-bold text-gray-900 dark:text-white">Total / 总计</span>
-            <span className="text-xl font-extrabold text-orange-600 dark:text-orange-500">{formatCurrency(totalAmount)}</span>
+            <span className="text-xl font-extrabold text-emphasis dark:text-primary">{formatCurrency(totalAmount)}</span>
           </div>
 
           <button
+            type="button"
             onClick={handleCheckout}
             disabled={cart.length === 0}
-            className="w-full py-3.5 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 dark:disabled:bg-zinc-800 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 text-lg shadow-lg shadow-orange-600/20"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-lg font-bold text-on-primary shadow-lg shadow-primary/20 transition-colors hover:bg-primary-hover disabled:bg-gray-300 disabled:text-gray-500 dark:disabled:bg-zinc-800 dark:disabled:text-gray-400"
           >
-            <CreditCard className="w-5 h-5" />
+            <CreditCard aria-hidden="true" className="w-5 h-5" />
             Checkout / 结账
           </button>
         </div>
@@ -170,29 +187,36 @@ export default function CashierRegister() {
       {/* Payment Method Modal */}
       {showPaymentModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl bg-white shadow-2xl dark:bg-zinc-900">
             <div className="p-5 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center">
               <h3 className="text-lg font-bold text-gray-900 dark:text-white">Payment Method / 支付方式</h3>
-              <button onClick={() => setShowPaymentModal(false)} className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800">
-                <X className="w-5 h-5 text-gray-500" />
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                aria-label="Close payment method dialog / 关闭支付方式"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800"
+              >
+                <X aria-hidden="true" className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <div className="p-5 space-y-3">
               <div className="text-center mb-4">
-                <span className="text-2xl font-extrabold text-orange-600">{formatCurrency(totalAmount)}</span>
+                <span className="text-2xl font-extrabold text-emphasis dark:text-primary">{formatCurrency(totalAmount)}</span>
               </div>
               <button
+                type="button"
                 onClick={() => handlePayment('Cash')}
                 className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl flex items-center justify-center gap-3 transition-colors text-lg"
               >
-                <Banknote className="w-6 h-6" />
+                <Banknote aria-hidden="true" className="w-6 h-6" />
                 Cash / 现金
               </button>
               <button
+                type="button"
                 onClick={() => handlePayment('QR Pay')}
                 className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-3 transition-colors text-lg"
               >
-                <QrCode className="w-6 h-6" />
+                <QrCode aria-hidden="true" className="w-6 h-6" />
                 QR Pay / 扫码支付
               </button>
               {/* Show uploaded QR image if available */}
