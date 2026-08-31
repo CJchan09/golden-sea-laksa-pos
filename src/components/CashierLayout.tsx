@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
-import { LogOut, Store, Clock, History, Wifi, WifiOff, Lock, Eye, EyeOff, Settings, KeyRound } from 'lucide-react';
+import { LogOut, House, Store, Clock, History, Wifi, WifiOff, Lock, Eye, EyeOff, Settings, KeyRound } from 'lucide-react';
 import CashierRegister from './CashierRegister';
 import CashierActive from './CashierActive';
 import CashierHistory from './CashierHistory';
 import EditMenu from './EditMenu';
 import { format } from 'date-fns';
 import { APP_ICON_SRC } from '../brand';
+import { IS_PUBLIC_DEMO } from '../demo-mode';
 
 const PASSWORD_KEY = 'golden_sea_laksa_admin_pw';
 const DEFAULT_PASSWORD = 'admin123';
@@ -19,9 +20,18 @@ interface Props {
   onLogout: () => void;
 }
 
+type CashierTab = 'register' | 'active' | 'history' | 'edit';
+
+function getInitialCashierTab(): CashierTab {
+  const routeTab = window.location.hash.split('/')[2];
+  return routeTab === 'active' || routeTab === 'history' || routeTab === 'edit'
+    ? routeTab
+    : 'register';
+}
+
 export default function CashierLayout({ onLogout }: Props) {
   const { isOnline, settings } = useStore();
-  const [activeTab, setActiveTab] = useState<'register' | 'active' | 'history' | 'edit'>('register');
+  const [activeTab, setActiveTab] = useState<CashierTab>(getInitialCashierTab);
   // History password gate
   const [historyUnlocked, setHistoryUnlocked] = useState(false);
   const [historyPw, setHistoryPw] = useState('');
@@ -35,6 +45,13 @@ export default function CashierLayout({ onLogout }: Props) {
   const [newPw2, setNewPw2] = useState('');
   const [pwMsg, setPwMsg] = useState('');
   const [pwSuccess, setPwSuccess] = useState(false);
+  const hasHistoryAccess = IS_PUBLIC_DEMO || historyUnlocked;
+
+  const selectTab = (tab: CashierTab) => {
+    setActiveTab(tab);
+    const nextHash = tab === 'register' ? '#/cashier' : `#/cashier/${tab}`;
+    window.history.replaceState(null, '', nextHash);
+  };
 
   const handleHistoryLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -232,11 +249,13 @@ export default function CashierLayout({ onLogout }: Props) {
           <button 
             type="button"
             onClick={onLogout}
-            aria-label="Log out and return to product home"
+            aria-label={IS_PUBLIC_DEMO ? 'Return to product home' : 'Log out and return to product home'}
             className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-600 dark:text-gray-300"
             title="Return to Home"
           >
-            <LogOut aria-hidden="true" className="w-5 h-5" />
+            {IS_PUBLIC_DEMO
+              ? <House aria-hidden="true" className="w-5 h-5" />
+              : <LogOut aria-hidden="true" className="w-5 h-5" />}
           </button>
         </div>
       </header>
@@ -247,7 +266,7 @@ export default function CashierLayout({ onLogout }: Props) {
         {activeTab === 'active' && <CashierActive />}
         {activeTab === 'edit' && <EditMenu />}
         {activeTab === 'history' && (
-          historyUnlocked ? <CashierHistory /> : <HistoryPasswordGate />
+          hasHistoryAccess ? <CashierHistory /> : <HistoryPasswordGate />
         )}
       </main>
 
@@ -256,7 +275,7 @@ export default function CashierLayout({ onLogout }: Props) {
         <div className="max-w-7xl mx-auto flex justify-between items-center px-2">
           <button
             type="button"
-            onClick={() => setActiveTab('register')}
+            onClick={() => selectTab('register')}
             aria-pressed={activeTab === 'register'}
             className={`mx-1 min-h-14 flex-1 flex flex-col items-center justify-center rounded-xl py-2 gap-1 transition-colors ${
               activeTab === 'register' 
@@ -270,7 +289,7 @@ export default function CashierLayout({ onLogout }: Props) {
           
           <button
             type="button"
-            onClick={() => setActiveTab('active')}
+            onClick={() => selectTab('active')}
             aria-pressed={activeTab === 'active'}
             className={`mx-1 min-h-14 flex-1 flex flex-col items-center justify-center rounded-xl py-2 gap-1 transition-colors ${
               activeTab === 'active' 
@@ -284,7 +303,7 @@ export default function CashierLayout({ onLogout }: Props) {
 
           <button
             type="button"
-            onClick={() => setActiveTab('history')}
+            onClick={() => selectTab('history')}
             aria-pressed={activeTab === 'history'}
             className={`mx-1 min-h-14 flex-1 flex flex-col items-center justify-center rounded-xl py-2 gap-1 transition-colors ${
               activeTab === 'history' 
@@ -298,7 +317,7 @@ export default function CashierLayout({ onLogout }: Props) {
           
           <button
             type="button"
-            onClick={() => setActiveTab('edit')}
+            onClick={() => selectTab('edit')}
             aria-pressed={activeTab === 'edit'}
             className={`mx-1 min-h-14 flex-1 flex flex-col items-center justify-center rounded-xl py-2 gap-1 transition-colors ${
               activeTab === 'edit' 

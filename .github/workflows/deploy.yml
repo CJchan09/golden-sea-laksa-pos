@@ -33,6 +33,7 @@ jobs:
         run: npm run build
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
+          VITE_PUBLIC_DEMO: 'true'
 
       - uses: actions/configure-pages@v4
 

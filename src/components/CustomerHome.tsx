@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useStore } from '../store';
 import { MenuItem } from '../types';
 import { formatCurrency } from '../utils';
-import { ArrowLeft, Plus, Globe, ReceiptText, UtensilsCrossed } from 'lucide-react';
+import { ArrowLeft, Plus, Globe, ReceiptText, UtensilsCrossed, ImageOff } from 'lucide-react';
 import CustomizationModal from './CustomizationModal';
 
 interface Props {
@@ -61,12 +61,18 @@ export default function CustomerHome({ onBack, onCheckout }: Props) {
                 key={item.id}
                 className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-surface-light p-3 dark:border-zinc-800 dark:bg-surface-dark"
               >
-                <img
-                  src={item.image}
-                  alt=""
-                  loading="lazy"
-                  className="aspect-square w-20 h-20 shrink-0 rounded-lg object-cover shadow-sm"
-                />
+                {item.image ? (
+                  <img
+                    src={item.image}
+                    alt=""
+                    loading="lazy"
+                    className="aspect-square w-20 h-20 shrink-0 rounded-lg object-cover shadow-sm"
+                  />
+                ) : (
+                  <div aria-hidden="true" className="grid aspect-square h-20 w-20 shrink-0 place-items-center rounded-lg bg-primary/10 text-emphasis dark:text-primary">
+                    <ImageOff className="h-7 w-7" />
+                  </div>
+                )}
                 <div className="flex flex-col flex-1 justify-center">
                   <p className="text-slate-900 dark:text-slate-100 text-base font-bold leading-snug">
                     {item.name[language]}

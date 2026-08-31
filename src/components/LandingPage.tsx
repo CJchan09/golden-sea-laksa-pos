@@ -8,6 +8,7 @@ import {
   UtensilsCrossed,
 } from 'lucide-react';
 import { APP_ICON_SRC } from '../brand';
+import { IS_PUBLIC_DEMO } from '../demo-mode';
 
 interface Props {
   onStart: () => void;
@@ -26,7 +27,9 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
             <img src={APP_ICON_SRC} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover shadow-lg shadow-black/30" />
             <div className="min-w-0">
               <p className="truncate text-base font-extrabold tracking-tight sm:text-lg">CJ F&amp;B POS</p>
-              <p className="text-xs font-semibold text-white/60">Public test build · 公开测试版</p>
+              <p className="text-xs font-semibold text-white/60">
+                {IS_PUBLIC_DEMO ? 'Public test build · 公开测试版' : 'Private build · 内部版本'}
+              </p>
             </div>
           </div>
 
@@ -47,14 +50,16 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
           <div className="max-w-xl">
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm font-bold text-primary">
               <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-              Phase 1 foundation tested
+              {IS_PUBLIC_DEMO ? 'Public demo · No password required' : 'Private build · Staff access protected'}
             </div>
 
             <h1 className="text-balance text-4xl font-extrabold leading-[1.05] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
               One simple flow from order to kitchen.
             </h1>
             <p className="mt-5 max-w-lg text-pretty text-lg leading-8 text-white/72">
-              给马来西亚小型餐饮商家的通用点单、收银和厨房流程。先体验示范店，再进入员工后台检查实际操作。
+              {IS_PUBLIC_DEMO
+                ? '给马来西亚小型餐饮商家的通用点单、收银和厨房流程。朋友可直接编辑菜单，新增菜品、大小份、面类和加料。'
+                : '给马来西亚小型餐饮商家的通用点单、收银和厨房流程。先体验示范店，再进入员工后台处理菜单与订单。'}
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -73,13 +78,15 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
                 className="inline-flex min-h-14 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-6 text-base font-bold text-white transition-colors hover:border-white/35 hover:bg-white/10"
               >
                 <MonitorSmartphone className="h-5 w-5" aria-hidden="true" />
-                Staff console
+                {IS_PUBLIC_DEMO ? 'Edit demo menu / 编辑菜单' : 'Staff console / 员工后台'}
               </button>
             </div>
 
             <p className="mt-4 flex items-start gap-2 text-sm leading-6 text-white/55">
               <CloudOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              当前为朋友公开测试版；资料只保存在这台设备，安装与断网重开会在 PWA 阶段验收。
+              {IS_PUBLIC_DEMO
+                ? '当前为朋友公开测试版；资料只保存在这台设备，安装与断网重开会在 PWA 阶段验收。'
+                : '当前为内部测试版；员工入口受本机密码保护，但仍不是 Cloud 安全账号。'}
             </p>
           </div>
 
@@ -100,7 +107,7 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
           <div className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-8 sm:grid-cols-3 sm:px-6 lg:px-8">
             {[
               ['01', 'Customer ordering', '顾客手机浏览、选配与提交订单。'],
-              ['02', 'Cashier control', '员工确认付款、处理进行中订单。'],
+              ['02', 'Menu & cashier control', '新增菜品和选项，再确认付款与处理订单。'],
               ['03', 'Kitchen clarity', '厨房按等待顺序制作并标记完成。'],
             ].map(([number, title, body]) => (
               <article key={number} className="rounded-2xl border border-white/10 bg-black/15 p-5">

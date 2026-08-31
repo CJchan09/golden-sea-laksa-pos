@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { MenuItem, Language, CartItem } from '../types';
 import { formatCurrency } from '../utils';
-import { X, Plus, Minus } from 'lucide-react';
+import { X, Plus, Minus, ImageOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface Props {
@@ -9,6 +9,28 @@ interface Props {
   language: Language;
   onClose: () => void;
   onAdd: (item: Omit<CartItem, 'id'>) => void;
+}
+
+interface CustomizationSelection {
+  sizeId: string;
+  noodleBaseIds: string[];
+  addOnIds: string[];
+  quantity: number;
+}
+
+export function calculateCustomizationTotal(
+  item: MenuItem,
+  { sizeId, noodleBaseIds, addOnIds, quantity }: CustomizationSelection,
+): number {
+  const sizePrice = item.sizes.find((size) => size.id === sizeId)?.price || 0;
+  const noodlePrice = noodleBaseIds.reduce((sum, noodleId) => {
+    return sum + (item.noodleBases.find((noodle) => noodle.id === noodleId)?.price || 0);
+  }, 0);
+  const addOnPrice = addOnIds.reduce((sum, addOnId) => {
+    return sum + (item.addOns.find((addOn) => addOn.id === addOnId)?.price || 0);
+  }, 0);
+
+  return (item.basePrice + sizePrice + noodlePrice + addOnPrice) * quantity;
 }
 
 export default function CustomizationModal({ item, language, onClose, onAdd }: Props) {
@@ -58,16 +80,12 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
   };
 
   const calculateTotal = () => {
-    let total = item.basePrice;
-    const sizePrice = item.sizes.find(s => s.id === sizeId)?.price || 0;
-    total += sizePrice;
-    
-    const addOnPrice = addOnIds.reduce((sum, a) => {
-      return sum + (item.addOns.find(ao => ao.id === a)?.price || 0);
-    }, 0);
-    total += addOnPrice;
-
-    return total * quantity;
+    return calculateCustomizationTotal(item, {
+      sizeId,
+      noodleBaseIds,
+      addOnIds,
+      quantity,
+    });
   };
 
   const isNoodleDisabled = (noodleId: string) => {
@@ -120,11 +138,20 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
 
           {/* Header Image & Close */}
           <div className="relative h-40 w-full shrink-0 sm:h-48">
-            <img 
-              src={item.image} 
-              alt={item.name[language]} 
-              className="h-full w-full object-cover"
-            />
+            {item.image ? (
+              <img
+                src={item.image}
+                alt={item.name[language]}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="grid h-full w-full place-items-center bg-primary/10 text-emphasis dark:text-primary">
+                <ImageOff aria-hidden="true" className="h-12 w-12" />
+                <span className="sr-only">
+                  {language === 'en' ? 'No menu image' : '暂无餐点图片'}
+                </span>
+              </div>
+            )}
             <button 
               ref={closeButtonRef}
               type="button"
@@ -161,7 +188,7 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
             )}
 
             {/* Size Selection */}
-            <div className="mb-8">
+            {item.sizes.length > 0 && <div className="mb-8">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-slate-900 dark:text-slate-100 text-lg font-bold">Size</h3>
                 <span className="text-xs font-medium px-2 py-1 bg-primary/15 text-emphasis dark:text-primary rounded-full">Required</span>
@@ -185,9 +212,6 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
                     />
                     <div className="flex grow flex-col">
                       <span className="text-slate-900 dark:text-slate-100 font-semibold">{s.name[language]}</span>
-                      <span className="text-slate-500 dark:text-slate-400 text-sm italic">
-                        {s.id === 'Small' ? 'Standard serving' : 'Extra noodles & toppings'}
-                      </span>
                     </div>
                     <span className="text-slate-900 dark:text-slate-100 font-medium">
                       +{formatCurrency(s.price)}
@@ -195,7 +219,7 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
                   </label>
                 ))}
               </div>
-            </div>
+            </div>}
 
             {/* Noodle Base Selection */}
             <div className="mb-6">
@@ -215,13 +239,16 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
                       }`}
                     >
                       <span className="text-slate-700 dark:text-slate-300 font-medium">{n.name[language]}</span>
-                      <input 
-                        type="checkbox" 
-                        checked={checked}
-                        disabled={disabled}
-                        onChange={() => handleNoodleToggle(n.id)}
-                        className="h-6 w-6 rounded-lg border-primary/20 text-primary focus:ring-primary focus:ring-offset-0 transition-colors"
-                      />
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-500 dark:text-slate-400 text-sm">+{formatCurrency(n.price)}</span>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={disabled}
+                          onChange={() => handleNoodleToggle(n.id)}
+                          className="h-6 w-6 rounded-lg border-primary/20 text-primary focus:ring-primary focus:ring-offset-0 transition-colors"
+                        />
+                      </div>
                     </label>
                   );
                 })}

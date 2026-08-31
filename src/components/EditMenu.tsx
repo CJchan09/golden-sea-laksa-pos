@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { MenuItem } from '../types';
 import { formatCurrency } from '../utils';
-import { Plus, Trash2, Save, Image as ImageIcon, QrCode, Upload, X, ArrowLeft, Store } from 'lucide-react';
+import { Plus, Trash2, Save, Image as ImageIcon, QrCode, Upload, X, ArrowLeft, Store, Info, ArrowDown, CheckCircle2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { IS_PUBLIC_DEMO } from '../demo-mode';
 
 export default function EditMenu() {
   const { language, settings, updateSettings } = useStore();
@@ -17,9 +18,20 @@ export default function EditMenu() {
   const [enableTax, setEnableTax] = useState(settings.enableTax);
   const [taxRate, setTaxRate] = useState(settings.taxRate);
   const [takeawayFee, setTakeawayFee] = useState(settings.takeawayFee);
+  const [saveMessage, setSaveMessage] = useState('');
 
   const qrInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const menuEditorRef = useRef<HTMLElement>(null);
+  const saveMessageTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (saveMessageTimerRef.current !== null) {
+        window.clearTimeout(saveMessageTimerRef.current);
+      }
+    };
+  }, []);
   
   const handleSave = () => {
     updateSettings({
@@ -33,7 +45,14 @@ export default function EditMenu() {
       taxRate,
       takeawayFee
     });
-    alert(language === 'en' ? 'Settings saved successfully!' : '设置保存成功！');
+    setSaveMessage(language === 'en' ? 'Settings saved successfully!' : '设置保存成功！');
+    if (saveMessageTimerRef.current !== null) {
+      window.clearTimeout(saveMessageTimerRef.current);
+    }
+    saveMessageTimerRef.current = window.setTimeout(() => {
+      setSaveMessage('');
+      saveMessageTimerRef.current = null;
+    }, 3000);
   };
 
   const handleAddMenuItem = () => {
@@ -46,7 +65,7 @@ export default function EditMenu() {
       noodleBases: [],
       addOns: []
     };
-    setMenuItems([...menuItems, newItem]);
+    setMenuItems((currentItems) => [newItem, ...currentItems]);
   };
 
   const handleVariationUpdate = (menuId: string, type: 'sizes' | 'noodleBases' | 'addOns', varId: string, field: 'nameEn' | 'nameZh' | 'price', value: string | number) => {
@@ -111,9 +130,42 @@ export default function EditMenu() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-32">
+      {saveMessage && (
+        <div
+          role="status"
+          className="fixed bottom-24 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-3 text-sm font-bold text-white shadow-2xl dark:bg-white dark:text-zinc-950"
+        >
+          <CheckCircle2 aria-hidden="true" className="h-5 w-5 text-primary" />
+          {saveMessage}
+        </div>
+      )}
+
+      {IS_PUBLIC_DEMO && (
+        <aside className="flex items-start gap-3 rounded-2xl border border-primary/40 bg-primary/10 p-4 text-sm leading-6 text-gray-800 dark:text-zinc-100">
+          <Info aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-emphasis dark:text-primary" />
+          <div className="flex-1">
+            <p>
+              <strong>Public demo / 公开测试：</strong>{' '}
+              试着新增商品、大小份、面类或加料，然后按“Save Changes / 保存更改”。资料只保存在这台设备的浏览器。
+            </p>
+            <button
+              type="button"
+              onClick={() => menuEditorRef.current?.scrollIntoView({
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+                block: 'start',
+              })}
+              className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 py-2 font-bold text-on-primary transition-colors hover:bg-primary-hover"
+            >
+              <ArrowDown aria-hidden="true" className="h-4 w-4" />
+              Go to menu editor / 到菜单编辑
+            </button>
+          </div>
+        </aside>
+      )}
+
       <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-zinc-800">
         <div>
-          <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
+          <h2 className="flex items-center gap-2 text-xl font-extrabold text-gray-900 dark:text-white sm:text-2xl">
             <Store className="w-6 h-6 text-emphasis dark:text-primary" />
             Store Settings / 门店设置
           </h2>
@@ -254,7 +306,7 @@ export default function EditMenu() {
       </div>
 
       {/* Menu Management */}
-      <section className="bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800">
+      <section ref={menuEditorRef} className="scroll-mt-24 bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
             Menu Items / 菜单管理
@@ -291,7 +343,7 @@ export default function EditMenu() {
                 )}
               </div>
               
-              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="min-w-0 flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">Name (EN) / 英文名</label>
                   <input
@@ -351,35 +403,38 @@ export default function EditMenu() {
                       </div>
                       <div className="grid gap-2">
                         {item[type]?.map((v: any) => (
-                          <div key={v.id} className="flex gap-2 items-center bg-white dark:bg-zinc-900 p-2 rounded-lg border border-gray-100 dark:border-zinc-800 shadow-sm">
+                          <div
+                            key={v.id}
+                            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 rounded-lg border border-gray-100 bg-white p-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(4.5rem,0.75fr)_2.75rem]"
+                          >
                             <input
                               type="text"
                               value={v.name.en}
                               onChange={e => handleVariationUpdate(item.id, type, v.id, 'nameEn', e.target.value)}
                               placeholder="EN"
-                              className="w-1/3 min-h-11 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary outline-none text-sm px-1 py-2 dark:text-white"
+                              className="min-h-11 min-w-0 w-full bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary outline-none text-sm px-1 py-2 dark:text-white"
                             />
                             <input
                               type="text"
                               value={v.name.zh}
                               onChange={e => handleVariationUpdate(item.id, type, v.id, 'nameZh', e.target.value)}
                               placeholder="ZH"
-                              className="w-1/3 min-h-11 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary outline-none text-sm px-1 py-2 dark:text-white"
+                              className="min-h-11 min-w-0 w-full bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary outline-none text-sm px-1 py-2 dark:text-white"
                             />
-                            <div className="w-1/4 flex items-center gap-1">
+                            <div className="flex min-w-0 items-center gap-1">
                               <span className="text-xs text-gray-400">+</span>
                               <input
                                 type="number"
                                 step="0.50"
                                 value={v.price}
                                 onChange={e => handleVariationUpdate(item.id, type, v.id, 'price', parseFloat(e.target.value) || 0)}
-                                className="w-full min-h-11 bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary outline-none text-sm px-1 py-2 dark:text-white text-right"
+                                className="min-h-11 min-w-0 w-full bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary outline-none text-sm px-1 py-2 dark:text-white text-right"
                               />
                             </div>
                             <button
                               type="button"
                               onClick={() => handleRemoveVariation(item.id, type, v.id)}
-                              className="min-h-11 min-w-11 flex items-center justify-center text-gray-500 hover:text-red-600 bg-gray-50 dark:text-zinc-400 dark:bg-zinc-950 rounded hover:bg-red-50 dark:hover:bg-red-950/50"
+                              className="min-h-11 min-w-11 justify-self-end flex items-center justify-center text-gray-500 hover:text-red-600 bg-gray-50 dark:text-zinc-400 dark:bg-zinc-950 rounded hover:bg-red-50 dark:hover:bg-red-950/50"
                               aria-label={`Remove ${v.name.en || type} option`}
                             >
                               <X className="w-4 h-4" />
@@ -400,6 +455,17 @@ export default function EditMenu() {
               <p>No menu items yet. Add one to get started!</p>
             </div>
           )}
+        </div>
+
+        <div className="mt-6 flex justify-end border-t border-gray-100 pt-6 dark:border-zinc-800">
+          <button
+            type="button"
+            onClick={handleSave}
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 font-bold text-on-primary shadow-sm transition-colors hover:bg-primary-hover sm:w-auto"
+          >
+            <Save aria-hidden="true" className="h-5 w-5" />
+            Save Changes / 保存更改
+          </button>
         </div>
       </section>
     </div>

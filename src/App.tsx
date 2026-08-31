@@ -11,6 +11,7 @@ import CashierLayout from './components/CashierLayout';
 import KitchenDisplay from './components/KitchenDisplay';
 import AdminLogin from './components/AdminLogin';
 import { StoreProvider } from './store';
+import { IS_PUBLIC_DEMO } from './demo-mode';
 
 type Route = 'landing' | 'order' | 'checkout' | 'cashier' | 'kitchen';
 
@@ -28,6 +29,7 @@ export default function App() {
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => {
     return sessionStorage.getItem('golden_sea_admin_auth') === 'true';
   });
+  const hasStaffAccess = IS_PUBLIC_DEMO || isAdminAuthenticated;
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -45,7 +47,7 @@ export default function App() {
     return (
       <LandingPage
         onStart={() => { window.location.hash = '#/order'; }}
-        onAdmin={() => { window.location.hash = '#/cashier'; }}
+        onAdmin={() => { window.location.hash = IS_PUBLIC_DEMO ? '#/cashier/edit' : '#/cashier'; }}
         onKitchen={() => { window.location.hash = '#/kitchen'; }}
       />
     );
@@ -57,9 +59,9 @@ export default function App() {
     window.location.hash = '';
   };
 
-  // Cashier route — requires login
+  // Public demos bypass the local gate; private builds retain it.
   if (route === 'cashier') {
-    if (!isAdminAuthenticated) {
+    if (!hasStaffAccess) {
       return <AdminLogin onLogin={handleAdminLogin} />;
     }
     return (
@@ -71,9 +73,9 @@ export default function App() {
     );
   }
 
-  // Kitchen route — requires login
+  // Kitchen follows the same build-level access policy as the cashier.
   if (route === 'kitchen') {
-    if (!isAdminAuthenticated) {
+    if (!hasStaffAccess) {
       return <AdminLogin onLogin={handleAdminLogin} />;
     }
     return (
