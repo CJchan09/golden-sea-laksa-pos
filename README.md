@@ -21,13 +21,14 @@ Suggested test flow:
 ## Public test boundaries
 
 - This build stores test data in the current browser/device. It is not a cloud account.
+- Each browser/device profile gets one local copy. Tabs in the same browser share it; saving cannot change the published baseline or data on another device.
 - Different phones and computers do not automatically share orders.
 - The public demo intentionally bypasses the Staff, KDS, and History password gates. This is not production authentication.
 - Do not enter real customer data, bank QR codes, passwords, or business records.
 - Google Sheet sync is disabled in the public build.
 - Installation, offline reopening, and native Android/iOS packaging are not included yet.
 
-To reset your test data, clear this site's browser storage.
+To reset your test data, choose **Reset Demo / 恢复示范资料** on the landing page or menu editor. The reset only removes this product's demo data from the current device; it preserves passwords and unrelated browser data.
 
 ## Run locally
 

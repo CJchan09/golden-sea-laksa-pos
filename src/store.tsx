@@ -2,7 +2,13 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { Order, CartItem, Language, PaymentMethod, SalesStats, ShopSettings } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
-import { GAS_URL, MENU_ITEMS as DEFAULT_MENU_ITEMS, SIZES, NOODLE_BASES, ADD_ONS } from './constants';
+import { GAS_URL, SIZES, NOODLE_BASES, ADD_ONS } from './constants';
+import { createDemoBaselineSettings } from './demo-baseline';
+import {
+  ACTIVE_DEMO_SYNC_CHANNEL_NAME,
+  PUBLIC_DEMO_RESET_MESSAGE,
+  PUBLIC_DEMO_RESET_SIGNAL_KEY,
+} from './demo-reset';
 
 const ORDERS_KEY = 'golden_sea_laksa_orders';
 const CART_KEY = 'golden_sea_laksa_cart';
@@ -10,20 +16,9 @@ const LANG_KEY = 'golden_sea_laksa_lang';
 const SETTINGS_KEY = 'golden_sea_laksa_settings';
 const POLL_INTERVAL = 5000; // 5 seconds
 
-const DEFAULT_SETTINGS: ShopSettings = {
-  shopNameEn: 'Golden Sea Laksa',
-  shopNameZh: '金海叻沙',
-  coverPhoto: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCjegoCLzYirXlh1HTLs2_xx75ZJoMPr5SyRVMiS8xTZ1uHZhqRoWFrEDGlID_-pHYBji24mgud-wfj8HtJWpu5iDpCcuWU-on863ufLGMwqrB01nDP6Xq_QxfBQMYBFa5xys0XxG-KzBmBkXxEo0FSPF4OAZhLvJ9s6wn1yhcxFlgwpnkNCm7tg29l-8URv4vqEQliXrBD2PKOqGjwXRKUN9QqkYXarnIo5-Gpzgyqq1vMsjMMadsKz-1Yq96yxHxnRWaQib9OFU2w',
-  qrImage: null,
-  menuItems: DEFAULT_MENU_ITEMS,
-  enableTax: false,
-  taxRate: 6,
-  takeawayFee: 0.50
-};
-
 // BroadcastChannel for cross-tab sync (different browser tabs)
 const channel = typeof BroadcastChannel !== 'undefined'
-  ? new BroadcastChannel('golden_sea_laksa_sync')
+  ? new BroadcastChannel(ACTIVE_DEMO_SYNC_CHANNEL_NAME)
   : null;
 
 // ==================== GAS API Helpers ====================
@@ -84,13 +79,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   const [settings, setSettings] = useState<ShopSettings>(() => {
+    const baselineSettings = createDemoBaselineSettings();
     const oldQr = localStorage.getItem('golden_sea_laksa_qr_image');
     if (oldQr) {
-      DEFAULT_SETTINGS.qrImage = oldQr;
+      baselineSettings.qrImage = oldQr;
       localStorage.removeItem('golden_sea_laksa_qr_image');
     }
     const stored = localStorage.getItem(SETTINGS_KEY);
-    const parsed = stored ? JSON.parse(stored) : DEFAULT_SETTINGS;
+    const parsed = stored ? JSON.parse(stored) : baselineSettings;
 
     // Migration for new varied options and taxes
     if (parsed.menuItems) {
@@ -136,18 +132,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     window.addEventListener('offline', handleOffline);
 
     // BroadcastChannel listener (for cross-tab sync)
+    const applyPublicDemoReset = () => {
+      setSettings(createDemoBaselineSettings());
+      setOrders([]);
+      setCart([]);
+      setLanguage('en');
+    };
+
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'orders_updated') {
         setOrders(event.data.orders);
       } else if (event.data?.type === 'settings_updated') {
         setSettings(event.data.settings);
+      } else if (event.data?.type === PUBLIC_DEMO_RESET_MESSAGE) {
+        applyPublicDemoReset();
+      }
+    };
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === PUBLIC_DEMO_RESET_SIGNAL_KEY && event.newValue !== null) {
+        applyPublicDemoReset();
       }
     };
     channel?.addEventListener('message', handleMessage);
+    window.addEventListener('storage', handleStorage);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('storage', handleStorage);
       channel?.removeEventListener('message', handleMessage);
     };
   }, []);

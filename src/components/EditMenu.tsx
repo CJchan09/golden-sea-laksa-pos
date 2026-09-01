@@ -5,6 +5,7 @@ import { formatCurrency } from '../utils';
 import { Plus, Trash2, Save, Image as ImageIcon, QrCode, Upload, X, ArrowLeft, Store, Info, ArrowDown, CheckCircle2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { IS_PUBLIC_DEMO } from '../demo-mode';
+import PublicDemoReset from './PublicDemoReset';
 
 export default function EditMenu() {
   const { language, settings, updateSettings } = useStore();
@@ -25,6 +26,10 @@ export default function EditMenu() {
   const menuEditorRef = useRef<HTMLElement>(null);
   const saveMessageTimerRef = useRef<number | null>(null);
 
+  const saveButtonLabel = IS_PUBLIC_DEMO
+    ? 'Save on this device / 仅保存本机'
+    : 'Save Changes / 保存更改';
+
   useEffect(() => {
     return () => {
       if (saveMessageTimerRef.current !== null) {
@@ -32,6 +37,17 @@ export default function EditMenu() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    setShopNameEn(settings.shopNameEn);
+    setShopNameZh(settings.shopNameZh);
+    setCoverPhoto(settings.coverPhoto);
+    setQrPreview(settings.qrImage);
+    setMenuItems(JSON.parse(JSON.stringify(settings.menuItems)));
+    setEnableTax(settings.enableTax);
+    setTaxRate(settings.taxRate);
+    setTakeawayFee(settings.takeawayFee);
+  }, [settings]);
   
   const handleSave = () => {
     updateSettings({
@@ -45,7 +61,9 @@ export default function EditMenu() {
       taxRate,
       takeawayFee
     });
-    setSaveMessage(language === 'en' ? 'Settings saved successfully!' : '设置保存成功！');
+    setSaveMessage(IS_PUBLIC_DEMO
+      ? (language === 'en' ? 'Saved on this device only.' : '已保存到这台设备。')
+      : (language === 'en' ? 'Settings saved successfully!' : '设置保存成功！'));
     if (saveMessageTimerRef.current !== null) {
       window.clearTimeout(saveMessageTimerRef.current);
     }
@@ -146,7 +164,7 @@ export default function EditMenu() {
           <div className="flex-1">
             <p>
               <strong>Public demo / 公开测试：</strong>{' '}
-              试着新增商品、大小份、面类或加料，然后按“Save Changes / 保存更改”。资料只保存在这台设备的浏览器。
+              这台设备的浏览器有一份本机副本，同浏览器标签会共享。你可以新增商品、大小份、面类或加料；保存不会改到公开原版或其他设备的资料。
             </p>
             <button
               type="button"
@@ -171,14 +189,17 @@ export default function EditMenu() {
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Configure your menu, shop name, and payment QR.</p>
         </div>
-        <button
-          type="button"
-          onClick={handleSave}
-          className="min-h-11 flex items-center justify-center gap-2 bg-primary hover:bg-primary-hover text-on-primary font-bold py-3 px-6 rounded-xl transition-all shadow-sm active:scale-[0.98]"
-        >
-          <Save className="w-5 h-5" />
-          Save Changes / 保存更改
-        </button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <PublicDemoReset buttonClassName="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 transition-colors hover:border-red-400 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200 dark:hover:bg-red-950/70 sm:w-auto" />
+          <button
+            type="button"
+            onClick={handleSave}
+            className="min-h-12 flex w-full items-center justify-center gap-2 bg-primary hover:bg-primary-hover text-on-primary font-bold py-3 px-6 rounded-xl transition-all shadow-sm active:scale-[0.98] sm:w-auto"
+          >
+            <Save aria-hidden="true" className="w-5 h-5" />
+            {saveButtonLabel}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -464,7 +485,7 @@ export default function EditMenu() {
             className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 font-bold text-on-primary shadow-sm transition-colors hover:bg-primary-hover sm:w-auto"
           >
             <Save aria-hidden="true" className="h-5 w-5" />
-            Save Changes / 保存更改
+            {saveButtonLabel}
           </button>
         </div>
       </section>

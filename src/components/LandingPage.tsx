@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { APP_ICON_SRC } from '../brand';
 import { IS_PUBLIC_DEMO } from '../demo-mode';
+import PublicDemoReset from './PublicDemoReset';
 
 interface Props {
   onStart: () => void;
@@ -88,6 +89,11 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
                 ? '当前为朋友公开测试版；资料只保存在这台设备，安装与断网重开会在 PWA 阶段验收。'
                 : '当前为内部测试版；员工入口受本机密码保护，但仍不是 Cloud 安全账号。'}
             </p>
+            {IS_PUBLIC_DEMO && (
+              <div className="mt-3">
+                <PublicDemoReset buttonClassName="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-400/35 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-100 transition-colors hover:border-red-300/60 hover:bg-red-500/20 sm:w-auto" />
+              </div>
+            )}
           </div>
 
           <figure className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/5 shadow-2xl shadow-black/35">
