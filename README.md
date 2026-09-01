@@ -4,7 +4,7 @@ A mobile-first, local-first ordering, cashier, and kitchen workflow for small F&
 
 ## Try the public demo
 
-**Live URL:** https://cjchan09.github.io/golden-sea-laksa-pos/
+**Live URL:** https://pos.cj-chan.work/
 
 - Customer ordering: choose **Try sample store / 试用示范店**.
 - Menu editing: choose **Edit demo menu / 编辑菜单**. It opens directly without a password.
@@ -14,9 +14,10 @@ Suggested test flow:
 
 1. Open **Edit demo menu**, add a dish and create option groups such as Size, Rice type, Protein, or Add-ons. Every choice can have its own extra price. Then choose **Save on this device**.
 2. Return home, open the sample store, and submit a dine-in cash order using the item you added.
-3. Open Staff console → Active and mark the order paid.
-4. Open KDS and mark the order completed.
-5. Return to Staff console → History and confirm the order total.
+3. Open the Staff console on the same phone. Use **Active** for payment and **Kitchen** for orders that are not served yet.
+4. Mark the order completed in Kitchen.
+5. Open **History**, confirm the total, and download the selected date range as a two-sheet Excel workbook.
+6. On supported Android browsers, choose **Install** when prompted. Reopen the installed test app after disconnecting the network.
 
 ## Public test boundaries
 
@@ -26,7 +27,8 @@ Suggested test flow:
 - The public demo intentionally bypasses the Staff, KDS, and History password gates. This is not production authentication.
 - Do not enter real customer data, bank QR codes, passwords, or business records.
 - Google Sheet sync is disabled in the public build.
-- Installation, offline reopening, and native Android/iOS packaging are not included yet.
+- The current deliverable is an installable Web/PWA test build with offline reopening. It is not yet the signed Google Play Android package.
+- The first visit and version updates need internet access. Default remote menu images are cached after they are viewed online.
 
 To reset your test data, choose **Reset Demo / 恢复示范资料** on the landing page or menu editor. The reset only removes this product's demo data from the current device; it preserves passwords and unrelated browser data.
 
@@ -51,4 +53,4 @@ npm test
 npm run build
 ```
 
-The GitHub Pages workflow builds from `main`. The public deployment intentionally does not inject private API, Google Apps Script, or Google Sheet values.
+The GitHub Pages workflow builds from `main` for the root custom domain. The public deployment intentionally does not inject private API, Google Apps Script, or Google Sheet values.

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '../store';
 import { formatCurrency } from '../utils';
 import { format, subDays, subMonths, startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth } from 'date-fns';
-import { TrendingUp, DollarSign, History, Banknote, Calendar, ChefHat, ExternalLink } from 'lucide-react';
+import { TrendingUp, DollarSign, History, Banknote, Calendar, ChefHat, ExternalLink, FileSpreadsheet, LoaderCircle } from 'lucide-react';
 import { DailyStat } from '../types';
 import { SHEET_URL } from '../constants';
 
@@ -33,13 +33,20 @@ function getDateRange(range: DateRange): { from: string; to: string; label: stri
 }
 
 export default function CashierHistory() {
-  const { orders, fetchStats } = useStore();
+  const { orders, fetchStats, settings } = useStore();
   const [dateRange, setDateRange] = useState<DateRange>('today');
   const [stats, setStats] = useState<{ totals: { bowls: number; revenue: number; orders: number }; daily: DailyStat[] } | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportMessage, setExportMessage] = useState('');
+  const [exportError, setExportError] = useState('');
 
   // Local fallback stats from orders in localStorage
   const currentRange = getDateRange(dateRange);
+  const ordersInRange = orders.filter(o => {
+    const oDate = o.timestamp.split(' ')[0];
+    return oDate >= currentRange.from && oDate <= currentRange.to;
+  });
   const localOrdersRange = orders.filter(o => {
     const oDate = o.timestamp.split(' ')[0];
     return o.status === 'Completed' && oDate >= currentRange.from && oDate <= currentRange.to;
@@ -70,6 +77,24 @@ export default function CashierHistory() {
   const avgBowlsPerDay = dailyBreakdown.length > 0 ? displayTotals.bowls / dailyBreakdown.length : displayTotals.bowls;
 
   const completedOrders = orders.filter(o => o.status === 'Completed');
+
+  const handleExport = async () => {
+    if (ordersInRange.length === 0 || isExporting) return;
+    setIsExporting(true);
+    setExportMessage('');
+    setExportError('');
+    try {
+      const {exportOrdersXlsx} = await import('../domain/export-orders-xlsx');
+      const filename = `CJ-POS-orders-${currentRange.from}-to-${currentRange.to}.xlsx`;
+      await exportOrdersXlsx(ordersInRange, settings, filename);
+      setExportMessage(`Downloaded ${ordersInRange.length} order${ordersInRange.length === 1 ? '' : 's'} / 已下载 ${ordersInRange.length} 张订单`);
+    } catch (error) {
+      console.error('[Excel export] Failed:', error);
+      setExportError('Could not create the Excel file. Please try again. / 无法建立 Excel，请重试。');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const paymentMethodLabel = (method?: string) => {
     switch (method) {
@@ -107,24 +132,42 @@ export default function CashierHistory() {
         ))}
       </div>
 
-      {/* Range Label + Google Sheet Button */}
+      {/* Range Label + Export Actions */}
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2 text-gray-500 dark:text-gray-400">
           <Calendar aria-hidden="true" className="h-4 w-4 shrink-0" />
           <span className="min-w-0 text-sm font-medium [overflow-wrap:anywhere]">{getDateRange(dateRange).label}: {getDateRange(dateRange).from} → {getDateRange(dateRange).to}</span>
           {isLoadingStats && <span className="animate-pulse text-xs font-bold text-emphasis dark:text-primary">Syncing...</span>}
         </div>
-        {SHEET_URL && (
-          <a
-            href={SHEET_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-bold text-green-700 transition-colors hover:bg-green-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 dark:border-green-800/30 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 dark:focus-visible:ring-green-400 dark:focus-visible:ring-offset-zinc-950 sm:w-auto"
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={ordersInRange.length === 0 || isExporting}
+            className="flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-extrabold text-on-primary transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
           >
-            <ExternalLink aria-hidden="true" className="w-4 h-4" />
-            Open Google Sheet
-          </a>
-        )}
+            {isExporting
+              ? <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" />
+              : <FileSpreadsheet aria-hidden="true" className="h-4 w-4" />}
+            {isExporting ? 'Creating… / 建立中…' : `Excel (${ordersInRange.length})`}
+          </button>
+          {SHEET_URL && (
+            <a
+              href={SHEET_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-bold text-green-700 transition-colors hover:bg-green-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 dark:border-green-800/30 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 dark:focus-visible:ring-green-400 dark:focus-visible:ring-offset-zinc-950 sm:w-auto"
+            >
+              <ExternalLink aria-hidden="true" className="w-4 h-4" />
+              Open Google Sheet
+            </a>
+          )}
+        </div>
+      </div>
+
+      <div aria-live="polite" className="min-h-5">
+        {exportMessage && <p className="text-sm font-semibold text-green-700 dark:text-green-400">{exportMessage}</p>}
+        {exportError && <p role="alert" className="text-sm font-semibold text-red-600 dark:text-red-400">{exportError}</p>}
       </div>
 
       {/* Dashboard KPI Cards */}

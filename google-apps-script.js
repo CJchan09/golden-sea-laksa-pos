@@ -12,11 +12,11 @@
  * 
  * 3. 点击菜单 Extensions → Apps Script
  * 4. 删除默认的 myFunction 代码，粘贴本文件所有内容
- * 5. 点击 Deploy → New deployment → 选 "Web app"
- *    - Execute as: Me
- *    - Who has access: Anyone
- * 6. 点击 Deploy → 复制 Web App URL
- * 7. 将 URL 粘贴到 GitHub Secrets 的 VITE_GAS_URL
+ * SECURITY NOTE / 安全说明:
+ * This legacy connector is not approved for a public "Execute as Me / Anyone"
+ * deployment because it has no real user authentication. Keep VITE_GAS_URL
+ * empty for the Offline release. The future Online edition must use an
+ * authenticated server before this connector is enabled.
  * 
  * =====================================================
  */
@@ -86,7 +86,7 @@ function addOrder(data) {
     data.paid ? 'TRUE' : 'FALSE',
     data.payment_method || '',
     new Date().toISOString()
-  ]);
+  ].map(escapeSheetCell));
   
   return jsonResponse({ success: true, message: 'Order added to ' + sheet.getName() });
 }
@@ -108,7 +108,7 @@ function updateOrderStatus(data) {
   
   // Update status (column I = 9)
   if (data.status) {
-    sheet.getRange(row, 9).setValue(data.status);
+    sheet.getRange(row, 9).setValue(escapeSheetCell(data.status));
   }
   // Update paid (column J = 10)
   if (data.paid !== undefined) {
@@ -116,7 +116,7 @@ function updateOrderStatus(data) {
   }
   // Update payment_method (column K = 11)
   if (data.payment_method) {
-    sheet.getRange(row, 11).setValue(data.payment_method);
+    sheet.getRange(row, 11).setValue(escapeSheetCell(data.payment_method));
   }
   // Update synced_at (column L = 12)
   sheet.getRange(row, 12).setValue(new Date().toISOString());
@@ -224,6 +224,16 @@ function getStats(from, to) {
 }
 
 // ==================== Helpers ====================
+
+/**
+ * Keep request-controlled strings literal when Google Sheets writes them.
+ * Values beginning with spreadsheet formula control characters are prefixed
+ * with an apostrophe, which Sheets uses as a literal-text marker.
+ */
+function escapeSheetCell(value) {
+  if (typeof value !== 'string') return value;
+  return /^[=+\-@\t\r]/.test(value) ? "'" + value : value;
+}
 
 /**
  * Get or create a monthly sheet like "Orders-2026-03"

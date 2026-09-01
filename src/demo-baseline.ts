@@ -2,7 +2,7 @@ import { MENU_ITEMS } from './constants';
 import { ItemVariation, MenuItem, ShopSettings } from './types';
 import { normalizeMenuItemOptionGroups } from './domain/menu-options';
 
-const DEMO_COVER_PHOTO = 'https://lh3.googleusercontent.com/aida-public/AB6AXuCjegoCLzYirXlh1HTLs2_xx75ZJoMPr5SyRVMiS8xTZ1uHZhqRoWFrEDGlID_-pHYBji24mgud-wfj8HtJWpu5iDpCcuWU-on863ufLGMwqrB01nDP6Xq_QxfBQMYBFa5xys0XxG-KzBmBkXxEo0FSPF4OAZhLvJ9s6wn1yhcxFlgwpnkNCm7tg29l-8URv4vqEQliXrBD2PKOqGjwXRKUN9QqkYXarnIo5-Gpzgyqq1vMsjMMadsKz-1Yq96yxHxnRWaQib9OFU2w';
+const DEMO_COVER_PHOTO = `${import.meta.env.BASE_URL}assets/pos-hero-v2-black-yellow.png`;
 
 function cloneVariation(variation: ItemVariation): ItemVariation {
   return {

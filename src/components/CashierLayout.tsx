@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
-import { LogOut, House, Store, Clock, History, Wifi, WifiOff, Lock, Eye, EyeOff, Settings, KeyRound } from 'lucide-react';
+import { LogOut, House, Store, Clock, History, Wifi, WifiOff, Lock, Eye, EyeOff, Settings, KeyRound, ChefHat } from 'lucide-react';
 import CashierRegister from './CashierRegister';
 import CashierActive from './CashierActive';
 import CashierHistory from './CashierHistory';
 import EditMenu from './EditMenu';
+import KitchenDisplay from './KitchenDisplay';
 import { format } from 'date-fns';
 import { APP_ICON_SRC } from '../brand';
 import { IS_PUBLIC_DEMO } from '../demo-mode';
@@ -20,17 +21,17 @@ interface Props {
   onLogout: () => void;
 }
 
-type CashierTab = 'register' | 'active' | 'history' | 'edit';
+type CashierTab = 'register' | 'active' | 'kitchen' | 'history' | 'edit';
 
 function getInitialCashierTab(): CashierTab {
   const routeTab = window.location.hash.split('/')[2];
-  return routeTab === 'active' || routeTab === 'history' || routeTab === 'edit'
+  return routeTab === 'active' || routeTab === 'kitchen' || routeTab === 'history' || routeTab === 'edit'
     ? routeTab
     : 'register';
 }
 
 export default function CashierLayout({ onLogout }: Props) {
-  const { isOnline, settings } = useStore();
+  const { isOnline, orders, settings } = useStore();
   const [activeTab, setActiveTab] = useState<CashierTab>(getInitialCashierTab);
   // History password gate
   const [historyUnlocked, setHistoryUnlocked] = useState(false);
@@ -46,6 +47,7 @@ export default function CashierLayout({ onLogout }: Props) {
   const [pwMsg, setPwMsg] = useState('');
   const [pwSuccess, setPwSuccess] = useState(false);
   const hasHistoryAccess = IS_PUBLIC_DEMO || historyUnlocked;
+  const kitchenOrderCount = orders.filter(order => order.status === 'Pending' || order.status === 'Preparing').length;
 
   const selectTab = (tab: CashierTab) => {
     setActiveTab(tab);
@@ -264,6 +266,7 @@ export default function CashierLayout({ onLogout }: Props) {
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 pb-24">
         {activeTab === 'register' && <CashierRegister />}
         {activeTab === 'active' && <CashierActive />}
+        {activeTab === 'kitchen' && <KitchenDisplay embedded />}
         {activeTab === 'edit' && <EditMenu />}
         {activeTab === 'history' && (
           hasHistoryAccess ? <CashierHistory /> : <HistoryPasswordGate />
@@ -299,6 +302,28 @@ export default function CashierLayout({ onLogout }: Props) {
           >
             <Clock aria-hidden="true" className={`w-6 h-6 ${activeTab === 'active' ? 'fill-current' : ''}`} />
             <span className="text-xs font-bold">Active</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => selectTab('kitchen')}
+            aria-pressed={activeTab === 'kitchen'}
+            aria-label={`Kitchen display, ${kitchenOrderCount} active orders`}
+            className={`relative mx-1 min-h-14 flex-1 flex flex-col items-center justify-center rounded-xl py-2 gap-1 transition-colors ${
+              activeTab === 'kitchen'
+                ? 'bg-primary text-on-primary'
+                : 'text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white'
+            }`}
+          >
+            <ChefHat aria-hidden="true" className={`w-6 h-6 ${activeTab === 'kitchen' ? 'fill-current' : ''}`} />
+            <span className="text-[11px] font-bold min-[390px]:text-xs">Kitchen</span>
+            {kitchenOrderCount > 0 && (
+              <span className={`absolute right-1.5 top-1 min-w-5 rounded-full px-1 text-center text-[10px] font-extrabold tabular-nums ${
+                activeTab === 'kitchen' ? 'bg-zinc-950 text-primary' : 'bg-red-600 text-white'
+              }`}>
+                {kitchenOrderCount > 99 ? '99+' : kitchenOrderCount}
+              </span>
+            )}
           </button>
 
           <button

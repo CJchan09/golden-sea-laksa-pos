@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store';
 import { getCartItemDisplay } from '../domain/cart-item-display';
-import { CheckCircle, ChefHat, Clock } from 'lucide-react';
+import { ArrowLeft, CheckCircle, ChefHat, Clock } from 'lucide-react';
 
 function getElapsedMinutes(timestamp: string): number {
   const orderTime = new Date(timestamp.replace(' ', 'T'));
@@ -27,7 +27,11 @@ function playBeep() {
   }
 }
 
-export default function KitchenDisplay() {
+interface Props {
+  embedded?: boolean;
+}
+
+export default function KitchenDisplay({embedded = false}: Props) {
   const { orders, updateOrderStatus, settings } = useStore();
   const [, setTick] = useState(0);
   const prevCountRef = useRef(0);
@@ -56,35 +60,54 @@ export default function KitchenDisplay() {
 
   if (activeOrders.length === 0) {
     return (
-      <div className="min-h-dvh bg-zinc-950 flex flex-col items-center justify-center p-8">
-        <div className="w-32 h-32 bg-zinc-900 rounded-full flex items-center justify-center mb-8 border-2 border-zinc-800">
-          <ChefHat className="w-16 h-16 text-primary" />
+      <section className={`${embedded ? 'min-h-[52dvh] rounded-2xl' : 'min-h-dvh'} relative bg-zinc-950 flex flex-col items-center justify-center p-6 text-center`}>
+        {!embedded && (
+          <a
+            href="#/cashier"
+            className="pt-safe absolute left-4 top-4 flex min-h-11 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-sm font-bold text-white hover:bg-zinc-800"
+          >
+            <ArrowLeft aria-hidden="true" className="h-5 w-5" />
+            Staff / 收银台
+          </a>
+        )}
+        <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full border-2 border-zinc-800 bg-zinc-900 sm:h-32 sm:w-32">
+          <ChefHat aria-hidden="true" className="h-12 w-12 text-primary sm:h-16 sm:w-16" />
         </div>
-        <h1 className="text-4xl font-extrabold text-zinc-400 mb-4">Waiting for Orders</h1>
-        <p className="text-xl text-zinc-400">等待新订单...</p>
+        <h1 className="mb-3 text-2xl font-extrabold text-zinc-200 sm:text-4xl">Waiting for Orders</h1>
+        <p className="text-lg text-zinc-400 sm:text-xl">等待新订单...</p>
         <div className="mt-8 flex items-center gap-3">
-          <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-zinc-400 font-medium">Kitchen Display Active / 后厨看板已连线</span>
+          <div className="h-3 w-3 rounded-full bg-green-500" />
+          <span className="text-sm font-medium text-zinc-400 sm:text-base">Local display ready / 本机看板已启动</span>
         </div>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div className="min-h-dvh bg-zinc-950 p-4 lg:p-6">
+    <section className={`${embedded ? 'rounded-2xl' : 'min-h-dvh'} bg-zinc-950 p-4 lg:p-6`}>
       {/* KDS Header */}
-      <div className="pt-safe flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <ChefHat className="w-8 h-8 text-primary" />
-          <div>
-            <h1 className="text-2xl font-extrabold text-white">Kitchen Display / 后厨看板</h1>
+      <div className={`${embedded ? '' : 'pt-safe'} mb-6 flex flex-wrap items-center justify-between gap-3`}>
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          {!embedded ? (
+            <a
+              href="#/cashier"
+              aria-label="Back to staff register / 返回收银台"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800"
+            >
+              <ArrowLeft aria-hidden="true" className="h-5 w-5" />
+            </a>
+          ) : (
+            <ChefHat aria-hidden="true" className="h-8 w-8 shrink-0 text-primary" />
+          )}
+          <div className="min-w-0">
+            <h1 className="text-xl font-extrabold leading-tight text-white sm:text-2xl">Kitchen Display / 后厨看板</h1>
             <p className="text-zinc-400 text-sm font-medium">
               <span aria-live="polite">{activeOrders.length} order{activeOrders.length > 1 ? 's' : ''} active / 进行中</span>
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+          <div className="w-3 h-3 rounded-full bg-green-500" />
           <span className="text-zinc-400 text-sm font-medium">LIVE</span>
         </div>
       </div>
@@ -187,6 +210,6 @@ export default function KitchenDisplay() {
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }
