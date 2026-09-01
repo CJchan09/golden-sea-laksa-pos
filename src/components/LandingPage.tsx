@@ -86,7 +86,7 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
             <p className="mt-4 flex items-start gap-2 text-sm leading-6 text-white/55">
               <CloudOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               {IS_PUBLIC_DEMO
-                ? '当前为朋友公开测试版；资料只保存在这台设备，安装与断网重开会在 PWA 阶段验收。'
+                ? '当前为朋友公开 PWA 测试版；资料只保存在这台设备，已支持安装与断网重开，但还不是 Google Play 正式 APP。'
                 : '当前为内部测试版；员工入口受本机密码保护，但仍不是 Cloud 安全账号。'}
             </p>
             {IS_PUBLIC_DEMO && (
