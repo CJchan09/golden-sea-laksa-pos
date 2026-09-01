@@ -12,6 +12,13 @@ describe('createDemoBaselineSettings', () => {
       name: { en: 'Extra', zh: '额外' },
       price: 99,
     });
+    changed.menuItems[0].optionGroups?.[0].choices.push({
+      id: 'huge',
+      names: { en: 'Huge', zh: '超大' },
+      priceDeltaSen: 999,
+      enabled: true,
+      sortOrder: 99,
+    });
 
     const fresh = createDemoBaselineSettings();
 
@@ -19,5 +26,7 @@ describe('createDemoBaselineSettings', () => {
     expect(fresh.menuItems[0].name.en).toBe('Laksa Without Kerang');
     expect(fresh.menuItems[0].sizes[0].name.en).toBe('Small');
     expect(fresh.menuItems[0].addOns.some((item) => item.id === 'extra')).toBe(false);
+    expect(fresh.menuItems[0].optionGroups).toHaveLength(3);
+    expect(fresh.menuItems[0].optionGroups?.[0].choices.some((choice) => choice.id === 'huge')).toBe(false);
   });
 });

@@ -4,6 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { GAS_URL, SIZES, NOODLE_BASES, ADD_ONS } from './constants';
 import { createDemoBaselineSettings } from './demo-baseline';
+import { normalizeMenuItemOptionGroups } from './domain/menu-options';
+import { getCartItemDisplay, hydrateCartItemSnapshots } from './domain/cart-item-display';
 import {
   ACTIVE_DEMO_SYNC_CHANNEL_NAME,
   PUBLIC_DEMO_RESET_MESSAGE,
@@ -88,13 +90,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const stored = localStorage.getItem(SETTINGS_KEY);
     const parsed = stored ? JSON.parse(stored) : baselineSettings;
 
-    // Migration for new varied options and taxes
+    // Idempotent compatibility adapter for legacy menu arrays.
     if (parsed.menuItems) {
-      parsed.menuItems = parsed.menuItems.map((item: any) => ({
+      parsed.menuItems = parsed.menuItems.map((item: any) => normalizeMenuItemOptionGroups({
         ...item,
         sizes: item.sizes || [...SIZES],
         noodleBases: item.noodleBases || [...NOODLE_BASES],
-        addOns: item.addOns || [...ADD_ONS]
+        addOns: item.addOns || [...ADD_ONS],
       }));
     }
     parsed.enableTax = parsed.enableTax ?? false;
@@ -117,11 +119,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // is handled by image compression and an explicit Archive/Export action,
       // not by quietly dropping last month's takings.
       const parsedOrders: Order[] = JSON.parse(storedOrders);
-      setOrders(parsedOrders);
+      const hydratedOrders = parsedOrders.map((order) => ({
+        ...order,
+        items: (order.items ?? []).map((item) => hydrateCartItemSnapshots(
+          item,
+          settings.menuItems.find((menuItem) => menuItem.id === item.menuItemId),
+        )),
+      }));
+      setOrders(hydratedOrders);
+      // Persist the one-time snapshots so later menu edits cannot rewrite the
+      // names shown by an older order after the next reload.
+      try {
+        localStorage.setItem(ORDERS_KEY, JSON.stringify(hydratedOrders));
+      } catch (error) {
+        console.warn('[Order snapshots] Could not persist compatibility upgrade:', error);
+      }
     }
 
     const storedCart = localStorage.getItem(CART_KEY);
-    if (storedCart) setCart(JSON.parse(storedCart));
+    if (storedCart) {
+      const parsedCart: CartItem[] = JSON.parse(storedCart);
+      const hydratedCart = parsedCart.map((item) => hydrateCartItemSnapshots(
+        item,
+        settings.menuItems.find((menuItem) => menuItem.id === item.menuItemId),
+      ));
+      setCart(hydratedCart);
+      try {
+        localStorage.setItem(CART_KEY, JSON.stringify(hydratedCart));
+      } catch (error) {
+        console.warn('[Cart snapshots] Could not persist compatibility upgrade:', error);
+      }
+    }
 
     const storedLang = localStorage.getItem(LANG_KEY);
     if (storedLang) setLanguage(storedLang as Language);
@@ -143,7 +171,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (event.data?.type === 'orders_updated') {
         setOrders(event.data.orders);
       } else if (event.data?.type === 'settings_updated') {
-        setSettings(event.data.settings);
+        setSettings({
+          ...event.data.settings,
+          menuItems: event.data.settings.menuItems.map(normalizeMenuItemOptionGroups),
+        });
       } else if (event.data?.type === PUBLIC_DEMO_RESET_MESSAGE) {
         applyPublicDemoReset();
       }
@@ -260,9 +291,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateSettings = useCallback((newSettings: ShopSettings) => {
-    setSettings(newSettings);
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(newSettings));
-    channel?.postMessage({ type: 'settings_updated', settings: newSettings });
+    const normalizedSettings = {
+      ...newSettings,
+      menuItems: newSettings.menuItems.map(normalizeMenuItemOptionGroups),
+    };
+    setSettings(normalizedSettings);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalizedSettings));
+    channel?.postMessage({ type: 'settings_updated', settings: normalizedSettings });
   }, []);
 
   const changeLanguage = useCallback((lang: Language) => {
@@ -295,25 +330,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const generateItemsSummary = (items: CartItem[], lang: Language): string => {
     return items.map(item => {
       const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
-      if (!menuItem) return '';
-
-      const sizeName = item.sizeId
-        ? menuItem.sizes.find(s => s.id === item.sizeId)?.name[lang] || ''
-        : SIZES.find(s => s.id === (item.size as any))?.name[lang];
-
-      const noodlesArr = item.noodleBaseIds
-        ? item.noodleBaseIds.map(n => menuItem.noodleBases.find(nb => nb.id === n)?.name[lang])
-        : (item.noodleBases || []).map(n => NOODLE_BASES.find(nb => nb.id === (n as any))?.name[lang]);
-      const noodles = noodlesArr.filter(Boolean).join('+');
-
-      const addonsArr = item.addOnIds
-        ? item.addOnIds.map(a => menuItem.addOns.find(ao => ao.id === a)?.name[lang])
-        : (item.addOns || []).map(a => ADD_ONS.find(ao => ao.id === (a as any))?.name[lang]);
-      const addons = addonsArr.filter(Boolean).join(',');
-
-      let summary = `${item.quantity}x ${menuItem.name[lang]}-${sizeName}${noodles ? '-' + noodles : ''}`;
-      if (addons) summary += `-加${addons}`;
-      return summary;
+      const display = getCartItemDisplay(item, menuItem, lang);
+      const details = display.details.length ? `-${display.details.join('-')}` : '';
+      return `${item.quantity}x ${display.itemName}${details}`;
     }).filter(Boolean).join('; ');
   };
 

@@ -59,7 +59,7 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
             </h1>
             <p className="mt-5 max-w-lg text-pretty text-lg leading-8 text-white/72">
               {IS_PUBLIC_DEMO
-                ? '给马来西亚小型餐饮商家的通用点单、收银和厨房流程。朋友可直接编辑菜单，新增菜品、大小份、面类和加料。'
+                ? '给马来西亚小型餐饮商家的通用点单、收银和厨房流程。朋友可直接编辑菜单，为每道菜建立大小份、主食、肉类和加料等选项组。'
                 : '给马来西亚小型餐饮商家的通用点单、收银和厨房流程。先体验示范店，再进入员工后台处理菜单与订单。'}
             </p>
 

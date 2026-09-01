@@ -12,7 +12,7 @@ A mobile-first, local-first ordering, cashier, and kitchen workflow for small F&
 
 Suggested test flow:
 
-1. Open **Edit demo menu**, add a dish plus any sizes, noodles, or add-ons, then choose **Save Changes**.
+1. Open **Edit demo menu**, add a dish and create option groups such as Size, Rice type, Protein, or Add-ons. Every choice can have its own extra price. Then choose **Save on this device**.
 2. Return home, open the sample store, and submit a dine-in cash order using the item you added.
 3. Open Staff console → Active and mark the order paid.
 4. Open KDS and mark the order completed.

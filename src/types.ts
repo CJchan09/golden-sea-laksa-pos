@@ -1,3 +1,5 @@
+import type { OptionGroup, OrderLineOptionSnapshot } from './data/app-schema';
+
 export type Language = 'en' | 'zh';
 
 export interface LocalizedString {
@@ -19,6 +21,14 @@ export interface MenuItem {
   sizes: ItemVariation[];
   noodleBases: ItemVariation[];
   addOns: ItemVariation[];
+  /**
+   * Generic, merchant-defined choices such as rice type, protein or spice.
+   *
+   * `undefined` means this item still uses the legacy `noodleBases` field and
+   * will be adapted once. An explicit empty array means the merchant chose to
+   * have no generic option groups, so it must not be backfilled again.
+   */
+  optionGroups?: OptionGroup[];
 }
 
 // Keeping old string union types for backward compatibility on historical orders
@@ -38,6 +48,12 @@ export interface CartItem {
 
   addOnIds: string[];
   addOns?: AddOnOption[]; // legacy
+
+  /** Immutable display snapshots for new carts and orders. */
+  itemName?: LocalizedString;
+  sizeSelection?: ItemVariation;
+  optionSelections?: OrderLineOptionSnapshot[];
+  addOnSelections?: ItemVariation[];
 
   quantity: number;
   unitPrice: number;

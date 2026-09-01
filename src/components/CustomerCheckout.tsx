@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
 import { formatCurrency } from '../utils';
-import { SIZES, NOODLE_BASES, ADD_ONS } from '../constants';
+import { getCartItemDisplay } from '../domain/cart-item-display';
 import { OrderType, PaymentMethod } from '../types';
 import { Banknote, QrCode, ArrowLeft, Trash2, ShoppingBag, X } from 'lucide-react';
 
@@ -164,38 +164,29 @@ export default function CustomerCheckout({ onBack }: Props) {
             <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-5 shadow-sm dark:border-zinc-700 dark:bg-surface-dark">
               {cart.map((item) => {
                 const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
-                const sizeName = item.sizeId
-                  ? menuItem?.sizes.find(s => s.id === item.sizeId)?.name[language] || ''
-                  : SIZES.find(s => s.id === (item.size as any))?.name[language];
-                const noodlesArr = item.noodleBaseIds
-                  ? item.noodleBaseIds.map(n => menuItem?.noodleBases.find(nb => nb.id === n)?.name[language])
-                  : (item.noodleBases || []).map(n => NOODLE_BASES.find(nb => nb.id === (n as any))?.name[language]);
-                const noodles = noodlesArr.filter(Boolean).join(' + ');
-                const addonsArr = item.addOnIds
-                  ? item.addOnIds.map(a => menuItem?.addOns.find(ao => ao.id === a)?.name[language])
-                  : (item.addOns || []).map(a => ADD_ONS.find(ao => ao.id === (a as any))?.name[language]);
-                const addons = addonsArr.filter(Boolean).join(', ');
+                const display = getCartItemDisplay(item, menuItem, language);
 
                 return (
                   <div key={item.id} className="flex gap-4 pb-5 border-b border-primary/5 last:border-0 last:pb-0">
                     <div className="flex-1">
                       <div className="flex justify-between items-start mb-1">
                         <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base">
-                          {item.quantity}x {menuItem?.name[language]}
+                          {item.quantity}x {display.itemName}
                         </h3>
                         <span className="font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap ml-4">
                           {formatCurrency(item.totalPrice)}
                         </span>
                       </div>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
-                        {sizeName} • {noodles}
-                        {addons && ` • +${addons}`}
-                      </p>
+                      {display.details.length > 0 && (
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
+                          {display.details.join(' • ')}
+                        </p>
+                      )}
                       <div className="flex items-center justify-end">
                         <button 
                           type="button"
                           onClick={() => removeFromCart(item.id)}
-                          aria-label={`${language === 'en' ? 'Remove' : '移除'} ${menuItem?.name[language] ?? 'item'}`}
+                          aria-label={`${language === 'en' ? 'Remove' : '移除'} ${display.itemName || 'item'}`}
                           className="min-h-11 text-red-600 hover:text-red-700 px-2 flex items-center gap-1 text-sm font-semibold"
                         >
                           <Trash2 className="w-3.5 h-3.5" />

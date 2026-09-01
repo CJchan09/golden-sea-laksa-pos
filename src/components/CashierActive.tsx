@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
 import { formatCurrency } from '../utils';
-import { SIZES, NOODLE_BASES, ADD_ONS } from '../constants';
+import { getCartItemDisplay } from '../domain/cart-item-display';
 import { CheckCircle, XCircle, Clock, CreditCard, Banknote, X, QrCode } from 'lucide-react';
 import { PaymentMethod } from '../types';
 
@@ -50,22 +50,17 @@ export default function CashierActive() {
           <ul className="space-y-2">
             {order.items.map((item, idx) => {
               const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
-              const sizeName = item.sizeId
-                ? menuItem?.sizes.find(s => s.id === item.sizeId)?.name.en || ''
-                : SIZES.find(s => s.id === (item.size as any))?.name.en;
-              const noodlesArr = item.noodleBaseIds
-                ? item.noodleBaseIds.map(n => menuItem?.noodleBases.find(nb => nb.id === n)?.name.en)
-                : (item.noodleBases || []).map(n => NOODLE_BASES.find(nb => nb.id === (n as any))?.name.en);
-              const noodles = noodlesArr.filter(Boolean).join('+');
-              const addonsArr = item.addOnIds
-                ? item.addOnIds.map(a => menuItem?.addOns.find(ao => ao.id === a)?.name.en)
-                : (item.addOns || []).map(a => ADD_ONS.find(ao => ao.id === (a as any))?.name.en);
-              const addons = addonsArr.filter(Boolean).join(', ');
+              const display = getCartItemDisplay(item, menuItem, 'en');
+              const displayZh = getCartItemDisplay(item, menuItem, 'zh');
+              const secondaryName = displayZh.itemName && displayZh.itemName !== display.itemName
+                ? ` (${displayZh.itemName})`
+                : '';
               return (
                 <li key={idx} className="text-sm text-gray-700 dark:text-gray-300 font-medium leading-relaxed">
-                  <span className="font-bold">{item.quantity}x</span> {menuItem?.name.en} ({menuItem?.name.zh})
-                  <span className="text-gray-500 dark:text-gray-400"> · {sizeName} · {noodles}</span>
-                  {addons && <span className="text-emphasis dark:text-primary"> +{addons}</span>}
+                  <span className="font-bold">{item.quantity}x</span> {display.itemName}{secondaryName}
+                  {display.details.length > 0 && (
+                    <span className="text-gray-500 dark:text-gray-400"> · {display.details.join(' · ')}</span>
+                  )}
                 </li>
               );
             })}

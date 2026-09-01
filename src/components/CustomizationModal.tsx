@@ -1,4 +1,18 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { OptionGroup } from '../data/app-schema';
+import { fromRinggit, multiplySen, toRinggit } from '../domain/money';
+import {
+  buildOptionSelectionSnapshots,
+  calculateOptionSelectionSen,
+  getEnabledOptionGroups,
+  getLegacyAddOnChoiceIds,
+  getLegacyNoodleChoiceIds,
+  getLegacySizeGroupId,
+  getLegacySizeChoiceId,
+  type OptionSelectionMap,
+  type OptionSelectionValidation,
+  validateOptionSelections,
+} from '../domain/menu-options';
 import { MenuItem, Language, CartItem } from '../types';
 import { formatCurrency } from '../utils';
 import { X, Plus, Minus, ImageOff } from 'lucide-react';
@@ -11,32 +25,115 @@ interface Props {
   onAdd: (item: Omit<CartItem, 'id'>) => void;
 }
 
-interface CustomizationSelection {
-  sizeId: string;
-  noodleBaseIds: string[];
-  addOnIds: string[];
+export interface CustomizationSelection {
+  optionSelections: OptionSelectionMap;
   quantity: number;
 }
 
 export function calculateCustomizationTotal(
   item: MenuItem,
-  { sizeId, noodleBaseIds, addOnIds, quantity }: CustomizationSelection,
+  { optionSelections, quantity }: CustomizationSelection,
 ): number {
-  const sizePrice = item.sizes.find((size) => size.id === sizeId)?.price || 0;
-  const noodlePrice = noodleBaseIds.reduce((sum, noodleId) => {
-    return sum + (item.noodleBases.find((noodle) => noodle.id === noodleId)?.price || 0);
-  }, 0);
-  const addOnPrice = addOnIds.reduce((sum, addOnId) => {
-    return sum + (item.addOns.find((addOn) => addOn.id === addOnId)?.price || 0);
-  }, 0);
+  const groups = getEnabledOptionGroups(item);
+  const unitPriceSen = fromRinggit(item.basePrice) + calculateOptionSelectionSen(groups, optionSelections);
+  return toRinggit(multiplySen(unitPriceSen, quantity));
+}
 
-  return (item.basePrice + sizePrice + noodlePrice + addOnPrice) * quantity;
+function resolveOptionText(
+  text: Partial<Record<Language, string>>,
+  language: Language,
+  fallback: string,
+): string {
+  return text[language] || text.en || text.zh || fallback;
+}
+
+function minimumForGroup(group: OptionGroup): number {
+  return group.required ? Math.max(1, group.minSelect) : Math.max(0, group.minSelect);
+}
+
+function createInitialSelections(groups: OptionGroup[], itemId: string): OptionSelectionMap {
+  const legacySizeGroupId = getLegacySizeGroupId(itemId);
+  return Object.fromEntries(groups.map((group) => {
+    // Preserve the old convenient Size default, but require an explicit choice
+    // for merchant-defined groups such as Protein or Rice type.
+    const shouldPreselect = minimumForGroup(group) === 1
+      && group.maxSelect === 1
+      && (group.id === legacySizeGroupId || group.choices.length === 1);
+    return [group.id, shouldPreselect && group.choices[0] ? [group.choices[0].id] : []];
+  }));
+}
+
+function selectionRuleText(group: OptionGroup, language: Language): string {
+  const minimum = minimumForGroup(group);
+
+  if (group.maxSelect === 1) {
+    if (minimum === 1) return language === 'en' ? 'Choose 1' : '请选择 1 项';
+    return language === 'en' ? 'Optional · choose up to 1' : '可选 · 最多选择 1 项';
+  }
+
+  if (minimum > 0) {
+    return language === 'en'
+      ? `Choose ${minimum}–${group.maxSelect}`
+      : `请选择 ${minimum}–${group.maxSelect} 项`;
+  }
+
+  return language === 'en'
+    ? `Optional · choose up to ${group.maxSelect}`
+    : `可选 · 最多选择 ${group.maxSelect} 项`;
+}
+
+function validationMessage(
+  validation: OptionSelectionValidation,
+  language: Language,
+): string {
+  const group = validation.group;
+  if (!group) {
+    return language === 'en'
+      ? 'Please review the selected options.'
+      : '请检查已选择的选项。';
+  }
+
+  const groupName = resolveOptionText(
+    group.names,
+    language,
+    language === 'en' ? 'this group' : '这个选项组',
+  );
+  const minimum = minimumForGroup(group);
+
+  if (validation.reason === 'minimum') {
+    return language === 'en'
+      ? `Please select at least ${minimum} option${minimum === 1 ? '' : 's'} for “${groupName}”.`
+      : `请在“${groupName}”至少选择 ${minimum} 项。`;
+  }
+
+  if (validation.reason === 'maximum') {
+    return language === 'en'
+      ? `Please select no more than ${group.maxSelect} option${group.maxSelect === 1 ? '' : 's'} for “${groupName}”.`
+      : `“${groupName}”最多只能选择 ${group.maxSelect} 项。`;
+  }
+
+  if (validation.reason === 'disabled-choice') {
+    return language === 'en'
+      ? `A selected option in “${groupName}” is no longer available. Please choose again.`
+      : `“${groupName}”中有选项已停用，请重新选择。`;
+  }
+
+  return language === 'en'
+    ? `A selected option in “${groupName}” could not be found. Please choose again.`
+    : `“${groupName}”中有选项已不存在，请重新选择。`;
+}
+
+function formatPriceDelta(priceDeltaSen: number, language: Language): string {
+  if (priceDeltaSen === 0) return language === 'en' ? 'Included' : '已包含';
+  const sign = priceDeltaSen > 0 ? '+' : '−';
+  return `${sign}${formatCurrency(toRinggit(Math.abs(priceDeltaSen)))}`;
 }
 
 export default function CustomizationModal({ item, language, onClose, onAdd }: Props) {
-  const [sizeId, setSizeId] = useState<string>(item.sizes[0]?.id || '');
-  const [noodleBaseIds, setNoodleBaseIds] = useState<string[]>([]);
-  const [addOnIds, setAddOnIds] = useState<string[]>([]);
+  const optionGroups = useMemo(() => getEnabledOptionGroups(item), [item]);
+  const [optionSelections, setOptionSelections] = useState<OptionSelectionMap>(() => (
+    createInitialSelections(optionGroups, item.id)
+  ));
   const [quantity, setQuantity] = useState(1);
   const [validationError, setValidationError] = useState('');
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -60,52 +157,57 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
     };
   }, [onClose]);
 
-  const handleNoodleToggle = (noodleId: string) => {
+  const chooseSingleOption = (groupId: string, choiceId: string | null) => {
     setValidationError('');
-    if (noodleBaseIds.includes(noodleId)) {
-      setNoodleBaseIds(noodleBaseIds.filter(n => n !== noodleId));
-    } else {
-      if (noodleBaseIds.length < 2) {
-        setNoodleBaseIds([...noodleBaseIds, noodleId]);
+    setOptionSelections((current) => ({
+      ...current,
+      [groupId]: choiceId ? [choiceId] : [],
+    }));
+  };
+
+  const toggleMultipleOption = (group: OptionGroup, choiceId: string) => {
+    setValidationError('');
+    setOptionSelections((current) => {
+      const selectedIds = current[group.id] ?? [];
+      if (selectedIds.includes(choiceId)) {
+        return {
+          ...current,
+          [group.id]: selectedIds.filter((id) => id !== choiceId),
+        };
       }
-    }
-  };
-
-  const handleAddOnToggle = (addonId: string) => {
-    if (addOnIds.includes(addonId)) {
-      setAddOnIds(addOnIds.filter(a => a !== addonId));
-    } else {
-      setAddOnIds([...addOnIds, addonId]);
-    }
-  };
-
-  const calculateTotal = () => {
-    return calculateCustomizationTotal(item, {
-      sizeId,
-      noodleBaseIds,
-      addOnIds,
-      quantity,
+      if (selectedIds.length >= group.maxSelect) return current;
+      return {
+        ...current,
+        [group.id]: [...selectedIds, choiceId],
+      };
     });
   };
 
-  const isNoodleDisabled = (noodleId: string) => {
-    return noodleBaseIds.length >= 2 && !noodleBaseIds.includes(noodleId);
-  };
+  const total = calculateCustomizationTotal(item, { optionSelections, quantity });
 
   const handleAddToCart = () => {
-    if (item.noodleBases.length > 0 && noodleBaseIds.length === 0) {
-      setValidationError(language === 'en' ? 'Please select at least one noodle base.' : '请选择至少一种面条。');
+    const validation = validateOptionSelections(optionGroups, optionSelections);
+    if (!validation.valid) {
+      setValidationError(validationMessage(validation, language));
       return;
     }
 
+    const sizeId = getLegacySizeChoiceId(item, optionSelections);
+    const noodleBaseIds = getLegacyNoodleChoiceIds(item, optionSelections);
+    const addOnIds = getLegacyAddOnChoiceIds(item, optionSelections);
+
     onAdd({
       menuItemId: item.id,
+      itemName: { ...item.name },
       sizeId,
       noodleBaseIds,
       addOnIds,
+      sizeSelection: item.sizes.find((choice) => choice.id === sizeId),
+      optionSelections: buildOptionSelectionSnapshots(optionGroups, optionSelections),
+      addOnSelections: item.addOns.filter((choice) => addOnIds.includes(choice.id)),
       quantity,
-      unitPrice: calculateTotal() / quantity,
-      totalPrice: calculateTotal()
+      unitPrice: calculateCustomizationTotal(item, { optionSelections, quantity: 1 }),
+      totalPrice: total,
     });
     onClose();
   };
@@ -165,20 +267,20 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
 
           {/* Content Area */}
           <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
-            <div className="flex justify-between items-start mb-2">
+            <div className="mb-2 flex items-start justify-between">
               <div>
-                <h2 id={titleId} className="text-slate-900 dark:text-slate-100 text-2xl font-bold leading-tight tracking-tight">
+                <h2 id={titleId} className="text-2xl font-bold leading-tight tracking-tight text-slate-900 dark:text-slate-100">
                   {item.name[language]}
                 </h2>
-                <p className="text-emphasis font-semibold mt-1 dark:text-primary">
-                  From {formatCurrency(item.basePrice)}
+                <p className="mt-1 font-semibold text-emphasis dark:text-primary">
+                  {language === 'en' ? 'From' : '起价'} {formatCurrency(item.basePrice)}
                 </p>
               </div>
             </div>
-            <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-6">
+            <p className="mb-6 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
               {language === 'en'
-                ? 'Choose the serving size, base, and optional add-ons for this item.'
-                : '请选择这份餐点的份量、主食和可选加料。'}
+                ? 'Choose the options you want for this item.'
+                : '请选择这份餐点所需的选项。'}
             </p>
 
             {validationError && (
@@ -187,103 +289,108 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
               </p>
             )}
 
-            {/* Size Selection */}
-            {item.sizes.length > 0 && <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-slate-900 dark:text-slate-100 text-lg font-bold">Size</h3>
-                <span className="text-xs font-medium px-2 py-1 bg-primary/15 text-emphasis dark:text-primary rounded-full">Required</span>
-              </div>
-              <div className="flex flex-col gap-3">
-                {item.sizes?.map(s => (
-                  <label 
-                    key={s.id}
-                    className={`group flex items-center gap-4 rounded-xl border-2 p-4 transition-all cursor-pointer ${
-                      sizeId === s.id
-                        ? 'border-primary bg-primary/5' 
-                        : 'border-primary/10 dark:border-primary/5 hover:border-primary/30'
-                    }`}
-                  >
-                    <input 
-                      type="radio" 
-                      name="size-selection" 
-                      checked={sizeId === s.id}
-                      onChange={() => setSizeId(s.id)}
-                      className="h-5 w-5 border-2 border-primary/30 bg-transparent text-primary focus:ring-primary focus:ring-offset-0"
-                    />
-                    <div className="flex grow flex-col">
-                      <span className="text-slate-900 dark:text-slate-100 font-semibold">{s.name[language]}</span>
-                    </div>
-                    <span className="text-slate-900 dark:text-slate-100 font-medium">
-                      +{formatCurrency(s.price)}
+            {optionGroups.map((group) => {
+              const selectedIds = optionSelections[group.id] ?? [];
+              const groupName = resolveOptionText(
+                group.names,
+                language,
+                language === 'en' ? 'Options' : '选项',
+              );
+              const singleSelection = group.maxSelect === 1;
+              const canChooseNone = minimumForGroup(group) === 0;
+
+              return (
+                <fieldset key={group.id} className="mb-8">
+                  <legend className="w-full">
+                    <span className="flex flex-wrap items-start justify-between gap-2">
+                      <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                        {groupName}
+                      </span>
+                      {minimumForGroup(group) > 0 && (
+                        <span className="rounded-full bg-primary/15 px-2 py-1 text-xs font-medium text-emphasis dark:text-primary">
+                          {language === 'en' ? 'Required' : '必选'}
+                        </span>
+                      )}
                     </span>
-                  </label>
-                ))}
-              </div>
-            </div>}
+                    <span className="mt-1 block text-sm text-slate-500 dark:text-slate-400">
+                      {selectionRuleText(group, language)}
+                    </span>
+                  </legend>
 
-            {/* Noodle Base Selection */}
-            <div className="mb-6">
-              <div className="flex flex-col mb-4">
-                <h3 className="text-slate-900 dark:text-slate-100 text-lg font-bold">Noodle Base</h3>
-                <p className="text-slate-500 dark:text-slate-400 text-sm">Select up to 2 for 'Cham' (Mix)</p>
-              </div>
-              <div className="grid grid-cols-1 gap-1">
-                {item.noodleBases?.map(n => {
-                  const disabled = isNoodleDisabled(n.id);
-                  const checked = noodleBaseIds.includes(n.id);
-                  return (
-                    <label 
-                      key={n.id}
-                      className={`flex items-center justify-between py-3 border-b border-primary/5 ${
-                        disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                      }`}
-                    >
-                      <span className="text-slate-700 dark:text-slate-300 font-medium">{n.name[language]}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="text-slate-500 dark:text-slate-400 text-sm">+{formatCurrency(n.price)}</span>
+                  <div className="mt-3 flex flex-col gap-2">
+                    {singleSelection && canChooseNone && (
+                      <label className={`flex min-h-14 cursor-pointer items-center gap-4 rounded-xl border-2 p-3 transition-colors ${
+                        selectedIds.length === 0
+                          ? 'border-primary bg-primary/5'
+                          : 'border-primary/10 hover:border-primary/30 dark:border-primary/5'
+                      }`}>
                         <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={disabled}
-                          onChange={() => handleNoodleToggle(n.id)}
-                          className="h-6 w-6 rounded-lg border-primary/20 text-primary focus:ring-primary focus:ring-offset-0 transition-colors"
+                          type="radio"
+                          name={`${titleId}-${group.id}`}
+                          checked={selectedIds.length === 0}
+                          onChange={() => chooseSingleOption(group.id, null)}
+                          className="h-5 w-5 shrink-0 border-2 border-primary/30 bg-transparent text-primary focus:ring-primary focus:ring-offset-0"
                         />
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">
+                          {language === 'en' ? 'No selection' : '不选择'}
+                        </span>
+                      </label>
+                    )}
 
-            {/* Add-ons Selection */}
-            <div className="mb-6">
-              <div className="flex flex-col mb-4">
-                <h3 className="text-slate-900 dark:text-slate-100 text-lg font-bold">Add-ons</h3>
-                <p className="text-slate-500 dark:text-slate-400 text-sm">Optional</p>
-              </div>
-              <div className="grid grid-cols-1 gap-1">
-                {item.addOns?.map(a => {
-                  const checked = addOnIds.includes(a.id);
-                  return (
-                    <label 
-                      key={a.id}
-                      className="flex items-center justify-between py-3 border-b border-primary/5 cursor-pointer"
-                    >
-                      <span className="text-slate-700 dark:text-slate-300 font-medium">{a.name[language]}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="text-slate-500 dark:text-slate-400 text-sm">+{formatCurrency(a.price)}</span>
-                        <input 
-                          type="checkbox" 
-                          checked={checked}
-                          onChange={() => handleAddOnToggle(a.id)}
-                          className="h-6 w-6 rounded-lg border-primary/20 text-primary focus:ring-primary focus:ring-offset-0 transition-colors"
-                        />
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
+                    {group.choices.map((choice) => {
+                      const checked = selectedIds.includes(choice.id);
+                      const disabled = !singleSelection
+                        && !checked
+                        && selectedIds.length >= group.maxSelect;
+                      const choiceName = resolveOptionText(
+                        choice.names,
+                        language,
+                        language === 'en' ? 'Unnamed option' : '未命名选项',
+                      );
+
+                      return (
+                        <label
+                          key={choice.id}
+                          className={`flex min-h-14 items-center gap-4 rounded-xl border-2 p-3 transition-colors ${
+                            disabled
+                              ? 'cursor-not-allowed border-primary/5 opacity-50'
+                              : checked
+                                ? 'cursor-pointer border-primary bg-primary/5'
+                                : 'cursor-pointer border-primary/10 hover:border-primary/30 dark:border-primary/5'
+                          }`}
+                        >
+                          <input
+                            type={singleSelection ? 'radio' : 'checkbox'}
+                            name={singleSelection ? `${titleId}-${group.id}` : undefined}
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={() => {
+                              if (singleSelection) chooseSingleOption(group.id, choice.id);
+                              else toggleMultipleOption(group, choice.id);
+                            }}
+                            className={`${singleSelection ? 'rounded-full' : 'rounded-md'} h-6 w-6 shrink-0 border-primary/20 text-primary focus:ring-primary focus:ring-offset-0`}
+                          />
+                          <span className="min-w-0 flex-1 break-words font-semibold text-slate-700 dark:text-slate-300">
+                            {choiceName}
+                          </span>
+                          <span className="shrink-0 text-sm font-medium text-slate-500 dark:text-slate-400">
+                            {formatPriceDelta(choice.priceDeltaSen, language)}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              );
+            })}
+
+            {optionGroups.length === 0 && (
+              <p className="rounded-xl bg-primary/10 px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
+                {language === 'en'
+                  ? 'No extra choices are required for this item.'
+                  : '这份餐点不需要选择其他选项。'}
+              </p>
+            )}
 
           </div>
 
@@ -315,10 +422,14 @@ export default function CustomizationModal({ item, language, onClose, onAdd }: P
                 onClick={handleAddToCart}
                 className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-primary px-3 text-sm font-bold text-on-primary shadow-lg shadow-black/15 transition-colors hover:bg-primary-hover min-[360px]:text-base"
               >
-                <span className="hidden min-[360px]:inline">Add to Order</span>
-                <span className="min-[360px]:hidden">Add</span>
+                <span className="hidden min-[360px]:inline">
+                  {language === 'en' ? 'Add to Order' : '加入订单'}
+                </span>
+                <span className="min-[360px]:hidden">
+                  {language === 'en' ? 'Add' : '加入'}
+                </span>
                 <span aria-hidden="true" className="h-1 w-1 rounded-full bg-black/30"></span>
-                <span>{formatCurrency(calculateTotal())}</span>
+                <span>{formatCurrency(total)}</span>
               </button>
             </div>
           </div>

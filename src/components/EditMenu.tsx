@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { MenuItem } from '../types';
-import { formatCurrency } from '../utils';
-import { Plus, Trash2, Save, Image as ImageIcon, QrCode, Upload, X, ArrowLeft, Store, Info, ArrowDown, CheckCircle2 } from 'lucide-react';
+import type { OptionGroup } from '../data/app-schema';
+import { getMenuOptionGroups } from '../domain/menu-options';
+import { Plus, Trash2, Save, Image as ImageIcon, QrCode, Upload, X, Store, Info, ArrowDown, CheckCircle2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { IS_PUBLIC_DEMO } from '../demo-mode';
+import MenuOptionManager from './MenuOptionManager';
 import PublicDemoReset from './PublicDemoReset';
 
 export default function EditMenu() {
@@ -81,39 +83,16 @@ export default function EditMenu() {
       image: '',
       sizes: [],
       noodleBases: [],
-      addOns: []
+      addOns: [],
+      optionGroups: [],
     };
     setMenuItems((currentItems) => [newItem, ...currentItems]);
   };
 
-  const handleVariationUpdate = (menuId: string, type: 'sizes' | 'noodleBases' | 'addOns', varId: string, field: 'nameEn' | 'nameZh' | 'price', value: string | number) => {
-    setMenuItems(prev => prev.map(m => {
-      if (m.id !== menuId) return m;
-      return {
-        ...m,
-        [type]: m[type].map((v: any) => {
-          if (v.id !== varId) return v;
-          if (field === 'nameEn') return { ...v, name: { ...v.name, en: value } };
-          if (field === 'nameZh') return { ...v, name: { ...v.name, zh: value } };
-          return { ...v, [field]: value };
-        })
-      };
-    }));
-  };
-
-  const handleAddVariation = (menuId: string, type: 'sizes' | 'noodleBases' | 'addOns') => {
-    setMenuItems(prev => prev.map(m => {
-      if (m.id !== menuId) return m;
-      const newVar = { id: uuidv4(), name: { en: 'New', zh: '新选项' }, price: 0 };
-      return { ...m, [type]: m[type] ? [...m[type], newVar] : [newVar] };
-    }));
-  };
-
-  const handleRemoveVariation = (menuId: string, type: 'sizes' | 'noodleBases' | 'addOns', varId: string) => {
-    setMenuItems(prev => prev.map(m => {
-      if (m.id !== menuId) return m;
-      return { ...m, [type]: m[type].filter((v: any) => v.id !== varId) };
-    }));
+  const handleOptionGroupsUpdate = (menuId: string, optionGroups: OptionGroup[]) => {
+    setMenuItems((currentItems) => currentItems.map((item) => (
+      item.id === menuId ? { ...item, optionGroups } : item
+    )));
   };
 
   const handleUpdateMenuItem = (id: string, field: string, value: string | number) => {
@@ -164,7 +143,7 @@ export default function EditMenu() {
           <div className="flex-1">
             <p>
               <strong>Public demo / 公开测试：</strong>{' '}
-              这台设备的浏览器有一份本机副本，同浏览器标签会共享。你可以新增商品、大小份、面类或加料；保存不会改到公开原版或其他设备的资料。
+              这台设备的浏览器有一份本机副本，同浏览器标签会共享。你可以新增商品，并为商品建立大小份、主食、肉类、加料等选项组；保存不会改到公开原版或其他设备的资料。
             </p>
             <button
               type="button"
@@ -405,66 +384,13 @@ export default function EditMenu() {
                   </button>
                 </div>
 
-                {/* Variations Sections */}
-                <div className="col-span-1 sm:col-span-2 grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4 border-t border-gray-100 dark:border-zinc-800 pt-4">
-                  {(['sizes', 'noodleBases', 'addOns'] as const).map(type => (
-                    <div key={type} className="space-y-2 bg-gray-50/50 dark:bg-zinc-950/50 p-3 rounded-xl border border-gray-100 dark:border-zinc-800">
-                      <div className="flex justify-between items-center bg-gray-200 dark:bg-zinc-800/80 px-3 py-2 rounded-lg">
-                        <span className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">
-                          {type === 'sizes' ? 'Sizes / 大小份' : type === 'noodleBases' ? 'Noodles / 面类' : 'Addons / 加料'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleAddVariation(item.id, type)}
-                          className="min-h-11 text-on-primary text-sm font-bold px-3 py-2 flex items-center gap-1 bg-primary hover:bg-primary-hover rounded shadow-sm"
-                          aria-label={`Add ${type} option to ${item.name.en || 'menu item'}`}
-                        >
-                          <Plus className="w-3 h-3" /> Add
-                        </button>
-                      </div>
-                      <div className="grid gap-2">
-                        {item[type]?.map((v: any) => (
-                          <div
-                            key={v.id}
-                            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 rounded-lg border border-gray-100 bg-white p-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(4.5rem,0.75fr)_2.75rem]"
-                          >
-                            <input
-                              type="text"
-                              value={v.name.en}
-                              onChange={e => handleVariationUpdate(item.id, type, v.id, 'nameEn', e.target.value)}
-                              placeholder="EN"
-                              className="min-h-11 min-w-0 w-full bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary outline-none text-sm px-1 py-2 dark:text-white"
-                            />
-                            <input
-                              type="text"
-                              value={v.name.zh}
-                              onChange={e => handleVariationUpdate(item.id, type, v.id, 'nameZh', e.target.value)}
-                              placeholder="ZH"
-                              className="min-h-11 min-w-0 w-full bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary outline-none text-sm px-1 py-2 dark:text-white"
-                            />
-                            <div className="flex min-w-0 items-center gap-1">
-                              <span className="text-xs text-gray-400">+</span>
-                              <input
-                                type="number"
-                                step="0.50"
-                                value={v.price}
-                                onChange={e => handleVariationUpdate(item.id, type, v.id, 'price', parseFloat(e.target.value) || 0)}
-                                className="min-h-11 min-w-0 w-full bg-transparent border-b border-gray-200 dark:border-zinc-700 focus:border-emphasis dark:focus:border-primary outline-none text-sm px-1 py-2 dark:text-white text-right"
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveVariation(item.id, type, v.id)}
-                              className="min-h-11 min-w-11 justify-self-end flex items-center justify-center text-gray-500 hover:text-red-600 bg-gray-50 dark:text-zinc-400 dark:bg-zinc-950 rounded hover:bg-red-50 dark:hover:bg-red-950/50"
-                              aria-label={`Remove ${v.name.en || type} option`}
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                <div className="col-span-1 mt-4 border-t border-gray-100 pt-4 dark:border-zinc-800 sm:col-span-2">
+                  <MenuOptionManager
+                    itemId={item.id}
+                    itemName={item.name.en || item.name.zh || 'menu item'}
+                    groups={getMenuOptionGroups(item)}
+                    onChange={(optionGroups) => handleOptionGroupsUpdate(item.id, optionGroups)}
+                  />
                 </div>
               </div>
             </div>

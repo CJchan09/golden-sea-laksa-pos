@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store';
-import { formatCurrency } from '../utils';
-import { SIZES, NOODLE_BASES, ADD_ONS } from '../constants';
+import { getCartItemDisplay } from '../domain/cart-item-display';
 import { CheckCircle, ChefHat, Clock } from 'lucide-react';
 
 function getElapsedMinutes(timestamp: string): number {
@@ -143,31 +142,20 @@ export default function KitchenDisplay() {
                   <ul className="space-y-4">
                     {order.items.map((item, idx) => {
                       const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
-                      const sizeName = item.sizeId
-                        ? menuItem?.sizes.find(s => s.id === item.sizeId)?.name.zh || ''
-                        : SIZES.find(s => s.id === (item.size as any))?.name.zh;
-                      const noodlesArr = item.noodleBaseIds
-                        ? item.noodleBaseIds.map(n => menuItem?.noodleBases.find(nb => nb.id === n)?.name.zh)
-                        : (item.noodleBases || []).map(n => NOODLE_BASES.find(nb => nb.id === (n as any))?.name.zh);
-                      const noodles = noodlesArr.filter(Boolean).join('+');
-                      const addonsArr = item.addOnIds
-                        ? item.addOnIds.map(a => menuItem?.addOns.find(ao => ao.id === a)?.name.zh)
-                        : (item.addOns || []).map(a => ADD_ONS.find(ao => ao.id === (a as any))?.name.zh);
-                      const addons = addonsArr.filter(Boolean);
+                      const display = getCartItemDisplay(item, menuItem, 'zh');
                       return (
                         <li key={idx} className="border-b border-zinc-800/50 pb-3 last:border-0 last:pb-0">
                           <div className="flex items-start justify-between">
                             <div>
                               <span className="text-2xl font-extrabold text-white">
-                                {item.quantity}x {menuItem?.name.zh}
+                                {item.quantity}x {display.itemName}
                               </span>
-                              <p className="text-lg text-zinc-400 font-bold mt-1">
-                                {sizeName} · {noodles}
-                              </p>
-                              {addons.length > 0 && (
-                                <p className="text-lg text-primary font-bold mt-1">
-                                  + {addons.join(', ')}
-                                </p>
+                              {display.details.length > 0 && (
+                                <div className="mt-1 space-y-1 text-lg font-bold text-zinc-400">
+                                  {display.details.map((detail, detailIndex) => (
+                                    <p key={`${detailIndex}-${detail}`}>{detail}</p>
+                                  ))}
+                                </div>
                               )}
                             </div>
                           </div>

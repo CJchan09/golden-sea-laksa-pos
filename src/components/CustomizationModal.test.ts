@@ -1,36 +1,83 @@
 import { describe, expect, it } from 'vitest';
 import { MenuItem } from '../types';
+import { getEnabledOptionGroups, validateOptionSelections } from '../domain/menu-options';
 import { calculateCustomizationTotal } from './CustomizationModal';
 
 const item: MenuItem = {
-  id: 'laksa',
-  name: { en: 'Laksa', zh: '叻沙' },
-  basePrice: 10,
+  id: 'fried-rice',
+  name: { en: 'Fried Rice', zh: '炒饭' },
+  basePrice: 10.07,
   image: '',
-  sizes: [{ id: 'large', name: { en: 'Large', zh: '大' }, price: 2 }],
-  noodleBases: [
-    { id: 'mee', name: { en: 'Mee', zh: '面' }, price: 1 },
-    { id: 'hoon', name: { en: 'Bee Hoon', zh: '米粉' }, price: 0.5 },
+  sizes: [],
+  noodleBases: [],
+  addOns: [],
+  optionGroups: [
+    {
+      id: 'staple',
+      names: { en: 'Staple', zh: '主食' },
+      required: true,
+      minSelect: 1,
+      maxSelect: 1,
+      sortOrder: 0,
+      choices: [
+        { id: 'rice', names: { en: 'Rice', zh: '饭' }, priceDeltaSen: 0, enabled: true, sortOrder: 0 },
+        { id: 'noodle', names: { en: 'Noodles', zh: '面' }, priceDeltaSen: 43, enabled: true, sortOrder: 1 },
+      ],
+    },
+    {
+      id: 'protein',
+      names: { en: 'Protein', zh: '肉类' },
+      required: true,
+      minSelect: 1,
+      maxSelect: 1,
+      sortOrder: 1,
+      choices: [
+        { id: 'chicken', names: { en: 'Chicken', zh: '鸡肉' }, priceDeltaSen: 0, enabled: true, sortOrder: 0 },
+        { id: 'beef', names: { en: 'Beef', zh: '牛肉' }, priceDeltaSen: 250, enabled: true, sortOrder: 1 },
+      ],
+    },
+    {
+      id: 'extras',
+      names: { en: 'Extras', zh: '加料' },
+      required: false,
+      minSelect: 0,
+      maxSelect: 2,
+      sortOrder: 2,
+      choices: [
+        { id: 'egg', names: { en: 'Egg', zh: '蛋' }, priceDeltaSen: 125, enabled: true, sortOrder: 0 },
+      ],
+    },
   ],
-  addOns: [{ id: 'egg', name: { en: 'Egg', zh: '蛋' }, price: 1.5 }],
 };
 
 describe('calculateCustomizationTotal', () => {
-  it('includes selected size, noodle bases, add-ons, and quantity', () => {
+  it('adds independent option groups in sen, then applies quantity', () => {
     expect(calculateCustomizationTotal(item, {
-      sizeId: 'large',
-      noodleBaseIds: ['mee', 'hoon'],
-      addOnIds: ['egg'],
+      optionSelections: {
+        staple: ['noodle'],
+        protein: ['beef'],
+        extras: ['egg'],
+      },
       quantity: 2,
-    })).toBe(30);
+    })).toBe(28.5);
   });
 
-  it('ignores option ids that do not belong to the item', () => {
+  it('does not charge for an unknown choice and validation rejects it', () => {
+    const selections = {
+      staple: ['missing'],
+      protein: ['chicken'],
+      extras: [],
+    };
+
     expect(calculateCustomizationTotal(item, {
-      sizeId: 'missing',
-      noodleBaseIds: ['missing'],
-      addOnIds: ['missing'],
+      optionSelections: selections,
       quantity: 1,
-    })).toBe(10);
+    })).toBe(10.07);
+
+    expect(validateOptionSelections(getEnabledOptionGroups(item), selections)).toMatchObject({
+      valid: false,
+      reason: 'unknown-choice',
+      group: { id: 'staple' },
+    });
   });
 });

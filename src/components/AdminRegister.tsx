@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useStore } from '../store';
 import { PaymentMethod, MenuItem, OrderType } from '../types';
 import { formatCurrency } from '../utils';
+import { getCartItemDisplay } from '../domain/cart-item-display';
 import CustomizationModal from './CustomizationModal';
 import { ShoppingCart, Trash2, Banknote, QrCode } from 'lucide-react';
 
@@ -103,12 +104,18 @@ export default function AdminRegister() {
           ) : (
             cart.map(item => {
               const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
+              const display = getCartItemDisplay(item, menuItem, language);
               return (
                 <div key={item.id} className="flex justify-between items-start pb-4 border-b border-gray-100 dark:border-zinc-800 last:border-0 last:pb-0">
                   <div className="flex-1 pr-2">
                     <h4 className="text-sm font-bold text-gray-900 dark:text-white leading-tight mb-1">
-                      {menuItem?.name[language]}
+                      {display.itemName}
                     </h4>
+                    {display.details.length > 0 && (
+                      <p className="mb-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                        {display.details.join(' • ')}
+                      </p>
+                    )}
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       Qty: {item.quantity} • {formatCurrency(item.totalPrice)}
                     </p>
