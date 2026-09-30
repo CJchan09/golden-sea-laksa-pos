@@ -1,18 +1,37 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import {readdirSync, readFileSync} from 'node:fs';
+import {defineConfig, type Plugin} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
   const configuredBase = process.env.VITE_BASE || '/';
   const base = configuredBase.endsWith('/') ? configuredBase : `${configuredBase}/`;
+  const isAndroid = process.env.VITE_ANDROID_APP === 'true';
 
   return {
     base,
+    build: {copyPublicDir: !isAndroid},
     plugins: [
       react(),
       tailwindcss(),
+      ...(isAndroid ? [{
+        name: 'android-public-assets',
+        // Android needs menu photos and icons, never a nested APK or website guide.
+        generateBundle() {
+          const publicRoot = path.resolve(__dirname, 'public');
+          const emitTree = (relative: string) => {
+            for (const entry of readdirSync(path.join(publicRoot, relative), {withFileTypes: true})) {
+              const child = path.posix.join(relative, entry.name);
+              if (entry.isDirectory()) emitTree(child);
+              else if (entry.isFile()) this.emitFile({type: 'asset', fileName: child, source: readFileSync(path.join(publicRoot, child))});
+            }
+          };
+          emitTree('assets');
+          emitTree('icon-options');
+        },
+      } satisfies Plugin] : []),
       VitePWA({
         registerType: 'prompt',
         includeAssets: [
@@ -23,7 +42,7 @@ export default defineConfig(() => {
         ],
         manifest: {
           id: base,
-          name: 'CJ F&B POS — Offline',
+          name: 'CJ POS',
           short_name: 'CJ POS',
           description: 'Local-first ordering, cashier, kitchen display and sales export for small F&B businesses.',
           lang: 'en',
@@ -56,13 +75,13 @@ export default defineConfig(() => {
           ],
           shortcuts: [
             {
-              name: 'Staff Register / 收银台',
+              name: 'Staff Register',
               short_name: 'Register',
               url: `${base}#/cashier`,
               icons: [{src: 'icon-options/app-icon-v2-192.png', sizes: '192x192'}],
             },
             {
-              name: 'Kitchen Display / 后厨看板',
+              name: 'Kitchen Display',
               short_name: 'Kitchen',
               url: `${base}#/cashier/kitchen`,
               icons: [{src: 'icon-options/app-icon-v2-192.png', sizes: '192x192'}],
@@ -70,7 +89,7 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
-          globPatterns: ['**/*.{html,js,css,png,svg,webp,woff2}'],
+          globPatterns: ['**/*.{html,js,css,png,jpg,jpeg,svg,webp,woff2}'],
           globIgnores: [
             '**/assets/pos-hero-v1.png',
             '**/icon-options/app-icon-v2-1024.png',
@@ -78,7 +97,7 @@ export default defineConfig(() => {
             '**/icon-options/option-*.png',
           ],
           navigateFallback: 'index.html',
-          navigateFallbackDenylist: [/^\/\.well-known\//],
+          navigateFallbackDenylist: [/^\/\.well-known\//, /\/(?:downloads|media)\//],
           cleanupOutdatedCaches: true,
           runtimeCaching: [
             {

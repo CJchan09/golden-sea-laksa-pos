@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest';
-import {buildOrderWorkbookSheets} from './export-orders-xlsx';
+import {buildOrderWorkbookSheets, createOrderWorkbookBlob} from './export-orders-xlsx';
+import {unzipSync, strFromU8} from 'fflate';
 import type {Order, ShopSettings} from '../types';
 
 const settings: ShopSettings = {
@@ -57,22 +58,23 @@ const order: Order = {
 };
 
 describe('buildOrderWorkbookSheets', () => {
-  it('creates a real two-sheet workbook model with numeric money cells', () => {
+  it('creates four report sheets with numeric money cells and a receipt summary', () => {
     const sheets = buildOrderWorkbookSheets([order], settings);
 
-    expect(sheets.map(sheet => sheet.sheet)).toEqual(['Orders', 'Order Items']);
-    expect(sheets[0].data).toHaveLength(2);
-    expect(sheets[1].data).toHaveLength(2);
-    expect(sheets[0].data[1][10]).toMatchObject({value: 20, type: Number, format: '0.00'});
+    expect(sheets.map(sheet => sheet.sheet)).toEqual(['Summary', 'Daily', 'Orders', 'Order Items']);
+    expect(sheets[2].data).toHaveLength(2);
+    expect(sheets[3].data).toHaveLength(2);
+    expect(sheets[2].data[1][10]).toMatchObject({value: 20, type: Number, format: '0.00'});
+    expect(sheets[0].data[4][1]).toMatchObject({value: 20, type: Number});
   });
 
   it('writes merchant-controlled spreadsheet values explicitly as text', () => {
     const sheets = buildOrderWorkbookSheets([order], settings);
 
-    expect(sheets[0].data[1][4]).toMatchObject({value: '@Table 1', type: String});
-    expect(sheets[0].data[1][5]).toMatchObject({value: '=SUM(A1:A2)', type: String});
-    expect(sheets[1].data[1][3]).toMatchObject({value: '=Unsafe-looking meal', type: String});
-    expect(sheets[1].data[1][5]).toMatchObject({value: 'Protein: +Beef', type: String});
+    expect(sheets[2].data[1][4]).toMatchObject({value: '@Table 1', type: String});
+    expect(sheets[2].data[1][5]).toMatchObject({value: '=Unsafe-looking meal × 2', type: String});
+    expect(sheets[3].data[1][3]).toMatchObject({value: '=Unsafe-looking meal', type: String});
+    expect(sheets[3].data[1][5]).toMatchObject({value: 'Protein: +Beef', type: String});
   });
 
   it.each(['=formula', '+formula', '-formula', '@formula', '\tformula', '\rformula'])(
@@ -81,7 +83,19 @@ describe('buildOrderWorkbookSheets', () => {
       const formulaLookingOrder = {...order, table_no: value};
       const sheets = buildOrderWorkbookSheets([formulaLookingOrder], settings);
 
-      expect(sheets[0].data[1][4]).toMatchObject({value, type: String});
+      expect(sheets[2].data[1][4]).toMatchObject({value, type: String});
     },
   );
+
+  it('creates a valid XLSX ZIP with four sheets and correct cross-day receipts', async () => {
+    const paidLater = {...order, paid_at: '2026-10-01T01:00:00Z'};
+    const blob = await createOrderWorkbookBlob([paidLater], settings, {from: '2026-10-01', to: '2026-10-01'});
+    const files = unzipSync(new Uint8Array(await blob.arrayBuffer()));
+    const workbook = strFromU8(files['xl/workbook.xml']);
+    expect(workbook).toContain('name="Summary"');
+    expect(workbook).toContain('name="Daily"');
+    expect(workbook).toContain('name="Orders"');
+    expect(workbook).toContain('name="Order Items"');
+    expect(strFromU8(files['xl/worksheets/sheet1.xml'])).toMatch(/<c[^>]*r="B5"[^>]*><v>20<\/v><\/c>/);
+  });
 });

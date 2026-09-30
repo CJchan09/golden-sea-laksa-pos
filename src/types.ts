@@ -1,10 +1,11 @@
 import type { OptionGroup, OrderLineOptionSnapshot } from './data/app-schema';
 
-export type Language = 'en' | 'zh';
+export type Language = 'en' | 'zh' | 'ms';
 
 export interface LocalizedString {
   en: string;
   zh: string;
+  ms?: string;
 }
 
 export interface ItemVariation {
@@ -81,6 +82,8 @@ export interface Order {
 
   status: OrderStatus;
   paid: boolean;
+  /** Actual receipt time. Absent on older paid orders. */
+  paid_at?: string;
   payment_method?: PaymentMethod;
   synced: boolean;
 }
@@ -100,10 +103,12 @@ export interface SalesStats {
 export interface ShopSettings {
   shopNameEn: string;
   shopNameZh: string;
+  shopNameMs?: string;
   coverPhoto: string;
   qrImage: string | null;
   menuItems: MenuItem[];
   enableTax: boolean;
   taxRate: number;
   takeawayFee: number;
+  defaultOrderType?: OrderType;
 }

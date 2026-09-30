@@ -51,7 +51,7 @@ function legacyOptionsToGroups(item: MenuItem): OptionGroup[] {
   if (item.sizes?.length) {
     groups.push({
       id: getLegacySizeGroupId(item.id),
-      names: { en: 'Size', zh: '大小份' },
+      names: { en: 'Size', zh: '大小份', ms: 'Saiz' },
       required: true,
       minSelect: 1,
       maxSelect: 1,
@@ -63,7 +63,7 @@ function legacyOptionsToGroups(item: MenuItem): OptionGroup[] {
   if (item.noodleBases?.length) {
     groups.push({
       id: getLegacyNoodleGroupId(item.id),
-      names: { en: 'Noodle type', zh: '面类' },
+      names: { en: 'Noodle type', zh: '面类', ms: 'Jenis mi' },
       required: true,
       minSelect: 1,
       maxSelect: Math.min(2, item.noodleBases.length),
@@ -75,7 +75,7 @@ function legacyOptionsToGroups(item: MenuItem): OptionGroup[] {
   if (item.addOns?.length) {
     groups.push({
       id: getLegacyAddOnGroupId(item.id),
-      names: { en: 'Add-ons', zh: '加料' },
+      names: { en: 'Add-ons', zh: '加料', ms: 'Tambahan' },
       required: false,
       minSelect: 0,
       maxSelect: item.addOns.length,

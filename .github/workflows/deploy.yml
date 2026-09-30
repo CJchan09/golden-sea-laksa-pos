@@ -29,11 +29,17 @@ jobs:
 
       - run: npm ci
 
+      - name: Validate
+        run: |
+          npm run lint
+          npm test
+
       - name: Build
         run: npm run build
         env:
           VITE_BASE: /
           VITE_PUBLIC_DEMO: 'true'
+          VITE_ANDROID_APP: 'false'
 
       - uses: actions/configure-pages@1f0c5cde4bc74cd7e1254d0cb4de8d49e9068c7d # v4
 

@@ -1,6 +1,7 @@
 import { ADD_ONS, NOODLE_BASES, SIZES } from '../constants';
 import type { OrderLineOptionSnapshot } from '../data/app-schema';
 import type { CartItem, Language, MenuItem } from '../types';
+import { localized, tr } from '../i18n';
 import {
   getLegacyAddOnGroupId,
   getLegacyNoodleGroupId,
@@ -17,10 +18,10 @@ export interface CartItemDisplay {
 }
 
 function localName(
-  value: { en?: string; zh?: string } | undefined,
+  value: { en?: string; zh?: string; ms?: string } | undefined,
   language: Language,
 ): string {
-  return value?.[language] || value?.en || value?.zh || '';
+  return localized(value, language);
 }
 
 function cloneSnapshots(snapshots: OrderLineOptionSnapshot[]): OrderLineOptionSnapshot[] {
@@ -181,7 +182,7 @@ export function getCartItemDisplay(
   const details = [
     sizeName,
     ...optionLabels,
-    addOnNames.length ? `${language === 'en' ? 'Add-ons' : '加料'}: ${addOnNames.join(', ')}` : '',
+    addOnNames.length ? `${tr(language, 'Add-ons', '加料', 'Tambahan')}: ${addOnNames.join(', ')}` : '',
   ].filter(Boolean);
 
   return { itemName, sizeName, optionLabels, addOnNames, details };

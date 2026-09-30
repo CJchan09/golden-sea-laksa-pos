@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store';
 import { getCartItemDisplay } from '../domain/cart-item-display';
-import { ArrowLeft, CheckCircle, ChefHat, Clock } from 'lucide-react';
+import { tr, orderTypeLabel, orderStatusLabel } from '../i18n';
+import LanguageSelector from './LanguageSelector';
+import { ArrowLeft, CheckCircle, ChefHat, Clock, CreditCard } from 'lucide-react';
 
 function getElapsedMinutes(timestamp: string): number {
   const orderTime = new Date(timestamp.replace(' ', 'T'));
@@ -29,11 +31,16 @@ function playBeep() {
 
 interface Props {
   embedded?: boolean;
+  onGoToPayments?: () => void;
 }
 
-export default function KitchenDisplay({embedded = false}: Props) {
-  const { orders, updateOrderStatus, settings } = useStore();
+export default function KitchenDisplay({embedded = false, onGoToPayments}: Props) {
+  const { orders, updateOrderStatus, settings, language, changeLanguage } = useStore();
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const completeLock = useRef(false);
   const [, setTick] = useState(0);
+  const [completedUnpaidOrder, setCompletedUnpaidOrder] = useState<{orderId: string; id: string} | null>(null);
   const prevCountRef = useRef(0);
 
   const activeOrders = [...orders]
@@ -58,26 +65,52 @@ export default function KitchenDisplay({embedded = false}: Props) {
     prevCountRef.current = activeOrders.length;
   }, [activeOrders.length]);
 
+  const handleCompleteOrder = async (order: typeof orders[0]) => {
+    if (completeLock.current) return;
+    completeLock.current = true;
+    setSaving(true); setSaveError('');
+    try {
+      if (!await updateOrderStatus(order.local_order_id, 'Completed')) throw new Error('save');
+      if (!order.paid) setCompletedUnpaidOrder({orderId: order.order_id, id: order.local_order_id});
+    } catch { setSaveError(tr(language,'Could not save. Please try again.','未能保存，请重试。','Tidak dapat disimpan. Cuba lagi.')); }
+    finally { completeLock.current = false; setSaving(false); }
+  };
+
+  const goToPayments = () => {
+    window.location.hash = '#/cashier/active' + (completedUnpaidOrder ? '?order=' + encodeURIComponent(completedUnpaidOrder.id) : '');
+  };
+
+  const paymentHandoff = completedUnpaidOrder && (
+    <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-500/40 bg-amber-950/40 p-4 text-white sm:flex-row sm:items-center sm:justify-between">
+      <p className="font-semibold">{tr(language,`Order ${completedUnpaidOrder.orderId} is ready and unpaid.`,`订单 ${completedUnpaidOrder.orderId} 已出餐，尚未付款。`,`Pesanan ${completedUnpaidOrder.orderId} siap dan belum dibayar.`)}</p>
+      <button type="button" onClick={goToPayments} className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-2 font-bold text-zinc-950 hover:bg-amber-400">
+        <CreditCard aria-hidden="true" className="h-5 w-5" />
+        {tr(language,'Go to payment','前往收款','Pergi ke bayaran')}
+      </button>
+    </div>
+  );
+
   if (activeOrders.length === 0) {
     return (
       <section className={`${embedded ? 'min-h-[52dvh] rounded-2xl' : 'min-h-dvh'} relative bg-zinc-950 flex flex-col items-center justify-center p-6 text-center`}>
+        {paymentHandoff}
         {!embedded && (
           <a
             href="#/cashier"
             className="pt-safe absolute left-4 top-4 flex min-h-11 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-sm font-bold text-white hover:bg-zinc-800"
           >
             <ArrowLeft aria-hidden="true" className="h-5 w-5" />
-            Staff / 收银台
+            {tr(language,'Staff','收银台','Pekerja')}
           </a>
         )}
         <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full border-2 border-zinc-800 bg-zinc-900 sm:h-32 sm:w-32">
           <ChefHat aria-hidden="true" className="h-12 w-12 text-primary sm:h-16 sm:w-16" />
         </div>
-        <h1 className="mb-3 text-2xl font-extrabold text-zinc-200 sm:text-4xl">Waiting for Orders</h1>
-        <p className="text-lg text-zinc-400 sm:text-xl">等待新订单...</p>
+        {!embedded && <LanguageSelector language={language} onChange={changeLanguage} />}
+        <h1 className="mb-3 text-2xl font-extrabold text-zinc-200 sm:text-4xl">{tr(language,'Waiting for orders','等待新订单','Menunggu pesanan')}</h1>
         <div className="mt-8 flex items-center gap-3">
           <div className="h-3 w-3 rounded-full bg-green-500" />
-          <span className="text-sm font-medium text-zinc-400 sm:text-base">Local display ready / 本机看板已启动</span>
+          <span className="text-sm font-medium text-zinc-400 sm:text-base">{tr(language,'Local display ready','本机看板已启动','Paparan tempatan sedia')}</span>
         </div>
       </section>
     );
@@ -85,13 +118,14 @@ export default function KitchenDisplay({embedded = false}: Props) {
 
   return (
     <section className={`${embedded ? 'rounded-2xl' : 'min-h-dvh'} bg-zinc-950 p-4 lg:p-6`}>
+      {paymentHandoff}
       {/* KDS Header */}
       <div className={`${embedded ? '' : 'pt-safe'} mb-6 flex flex-wrap items-center justify-between gap-3`}>
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           {!embedded ? (
             <a
               href="#/cashier"
-              aria-label="Back to staff register / 返回收银台"
+              aria-label={tr(language,'Back to staff','返回收银台','Kembali kepada pekerja')}
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 text-white hover:bg-zinc-800"
             >
               <ArrowLeft aria-hidden="true" className="h-5 w-5" />
@@ -100,24 +134,26 @@ export default function KitchenDisplay({embedded = false}: Props) {
             <ChefHat aria-hidden="true" className="h-8 w-8 shrink-0 text-primary" />
           )}
           <div className="min-w-0">
-            <h1 className="text-xl font-extrabold leading-tight text-white sm:text-2xl">Kitchen Display / 后厨看板</h1>
+            <h1 className="text-xl font-extrabold leading-tight text-white sm:text-2xl">{tr(language,'Kitchen','后厨看板','Dapur')}</h1>
             <p className="text-zinc-400 text-sm font-medium">
-              <span aria-live="polite">{activeOrders.length} order{activeOrders.length > 1 ? 's' : ''} active / 进行中</span>
+              <span aria-live="polite">{activeOrders.length} {tr(language,'active orders','进行中订单','pesanan aktif')}</span>
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-green-500" />
-          <span className="text-zinc-400 text-sm font-medium">LIVE</span>
+          {!embedded && <LanguageSelector language={language} onChange={changeLanguage} />}
         </div>
       </div>
+
+      {saveError && <p role="alert" className="mb-4 text-red-400">{saveError}</p>}
 
       {/* Orders Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 lg:gap-6">
         {activeOrders.map(order => {
           const elapsed = getElapsedMinutes(order.timestamp);
           const isUrgent = elapsed >= 10;
-          const isPending = order.status === 'Pending';
+          const isNew = order.status === 'Pending';
 
           return (
             <div
@@ -125,7 +161,7 @@ export default function KitchenDisplay({embedded = false}: Props) {
               className={`bg-zinc-900 rounded-2xl border-2 overflow-hidden flex flex-col ${
                 isUrgent
                   ? 'border-red-500/60 shadow-lg shadow-red-500/10'
-                  : isPending
+                  : isNew
                     ? 'border-primary/60 shadow-lg shadow-black/30'
                     : 'border-zinc-800'
               }`}
@@ -134,20 +170,23 @@ export default function KitchenDisplay({embedded = false}: Props) {
               <div className="p-5 border-b border-zinc-800 flex justify-between items-center">
                 <div>
                   <h2 className="text-4xl font-extrabold text-white tracking-tight">{order.order_id}</h2>
-                  <div className="flex items-center gap-2 mt-2">
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
                     <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase ${
                       order.order_type === 'Dine-in'
                         ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                         : 'bg-zinc-700 text-zinc-100 border border-zinc-600'
                     }`}>
-                      {order.order_type === 'Dine-in' ? `Table ${order.table_no}` : 'Takeaway'}
+                      {orderTypeLabel(language, order.order_type)} {order.table_no || ''}
                     </span>
                     <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase ${
-                      isPending
-                        ? 'bg-primary text-on-primary border border-primary'
-                        : 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      order.paid
+                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                     }`}>
-                      {isPending ? '未付款 Unpaid' : '已付款 Paid'}
+                      {order.paid ? tr(language,'Paid','已付款','Dibayar') : tr(language,'Unpaid','未付款','Belum dibayar')}
+                    </span>
+                    <span className="text-xs font-bold px-3 py-1 rounded-full uppercase bg-zinc-800 text-zinc-300 border border-zinc-700">
+                      {orderStatusLabel(language,order.status)}
                     </span>
                   </div>
                 </div>
@@ -165,7 +204,7 @@ export default function KitchenDisplay({embedded = false}: Props) {
                   <ul className="space-y-4">
                     {order.items.map((item, idx) => {
                       const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
-                      const display = getCartItemDisplay(item, menuItem, 'zh');
+                      const display = getCartItemDisplay(item, menuItem, language);
                       return (
                         <li key={idx} className="border-b border-zinc-800/50 pb-3 last:border-0 last:pb-0">
                           <div className="flex items-start justify-between">
@@ -196,7 +235,8 @@ export default function KitchenDisplay({embedded = false}: Props) {
               {/* Complete Button */}
               <button
                 type="button"
-                onClick={() => updateOrderStatus(order.local_order_id, 'Completed')}
+                disabled={saving}
+                onClick={() => handleCompleteOrder(order)}
                 className={`w-full py-6 font-extrabold text-2xl flex items-center justify-center gap-3 transition-all active:scale-[0.98] ${
                   isUrgent
                     ? 'bg-red-600 hover:bg-red-700 text-white'
@@ -204,7 +244,7 @@ export default function KitchenDisplay({embedded = false}: Props) {
                 }`}
               >
                 <CheckCircle aria-hidden="true" className="w-8 h-8" />
-                出餐完成 / Done
+                {saving ? tr(language,'Saving…','保存中…','Menyimpan…') : tr(language,'Ready','出餐完成','Siap')}
               </button>
             </div>
           );

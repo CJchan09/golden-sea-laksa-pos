@@ -1,297 +1,113 @@
-import React, { useState, useEffect } from 'react';
-import { useStore } from '../store';
-import { formatCurrency } from '../utils';
-import { format, subDays, subMonths, startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth } from 'date-fns';
-import { TrendingUp, DollarSign, History, Banknote, Calendar, ChefHat, ExternalLink, FileSpreadsheet, LoaderCircle } from 'lucide-react';
-import { DailyStat } from '../types';
-import { SHEET_URL } from '../constants';
-
-type DateRange = 'today' | 'week' | 'month' | 'year';
-
-function getDateRange(range: DateRange): { from: string; to: string; label: string } {
-  const now = new Date();
-  const today = format(now, 'yyyy-MM-dd');
-
-  switch (range) {
-    case 'today':
-      return { from: today, to: today, label: 'Today / 今日' };
-    case 'week': {
-      const start = format(startOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');
-      const end = format(endOfWeek(now, { weekStartsOn: 1 }), 'yyyy-MM-dd');
-      return { from: start, to: end, label: 'This Week / 本周' };
-    }
-    case 'month': {
-      const start = format(startOfMonth(now), 'yyyy-MM-dd');
-      const end = format(endOfMonth(now), 'yyyy-MM-dd');
-      return { from: start, to: end, label: 'This Month / 本月' };
-    }
-    case 'year': {
-      const start = format(startOfYear(now), 'yyyy-MM-dd');
-      return { from: start, to: today, label: 'This Year / 今年' };
-    }
-  }
-}
+import {useEffect, useMemo, useState} from 'react';
+import {Calendar, ChevronLeft, ChevronRight, FileSpreadsheet, LoaderCircle} from 'lucide-react';
+import {useStore} from '../store';
+import {formatCurrency} from '../utils';
+import {localized, orderStatusLabel, paymentLabel, tr} from '../i18n';
+import {buildSalesReport, getReportRange, inReportRange, receiptDate, reportingDate, type ReportPeriod} from '../domain/reporting';
+import {isSalesOrder} from '../domain/sales';
+import {fileErrorMessage} from '../domain/native-export';
+import DataTools from './DataTools';
 
 export default function CashierHistory() {
-  const { orders, fetchStats, settings } = useStore();
-  const [dateRange, setDateRange] = useState<DateRange>('today');
-  const [stats, setStats] = useState<{ totals: { bowls: number; revenue: number; orders: number }; daily: DailyStat[] } | null>(null);
-  const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const {orders, settings, language} = useStore();
+  const t = (en: string, zh: string, ms: string) => tr(language, en, zh, ms);
+  const [period, setPeriod] = useState<ReportPeriod | 'custom'>('day');
+  const [customFrom, setCustomFrom] = useState(reportingDate);
+  const [customTo, setCustomTo] = useState(reportingDate);
+  const [anchor, setAnchor] = useState(reportingDate);
   const [isExporting, setIsExporting] = useState(false);
-  const [exportMessage, setExportMessage] = useState('');
-  const [exportError, setExportError] = useState('');
-
-  // Local fallback stats from orders in localStorage
-  const currentRange = getDateRange(dateRange);
-  const ordersInRange = orders.filter(o => {
-    const oDate = o.timestamp.split(' ')[0];
-    return oDate >= currentRange.from && oDate <= currentRange.to;
-  });
-  const localOrdersRange = orders.filter(o => {
-    const oDate = o.timestamp.split(' ')[0];
-    return o.status === 'Completed' && oDate >= currentRange.from && oDate <= currentRange.to;
-  });
-  const localTotalBowls = localOrdersRange.reduce((sum, o) => sum + o.total_qty, 0);
-  const localTotalRevenue = localOrdersRange.reduce((sum, o) => sum + o.total_amount, 0);
-
-  // Fetch stats from GAS when date range changes
-  useEffect(() => {
-    const loadStats = async () => {
-      setIsLoadingStats(true);
-      const { from, to } = getDateRange(dateRange);
-      const result = await fetchStats(from, to);
-      setStats(result);
-      setIsLoadingStats(false);
-    };
-    loadStats();
-  }, [dateRange]);
-
-  // Use GAS stats if available, otherwise fallback to local
-  const displayTotals = stats?.totals || {
-    bowls: localTotalBowls,
-    revenue: localTotalRevenue,
-    orders: localOrdersRange.length,
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [visible, setVisible] = useState(50);
+  const range = useMemo(() => period === 'custom' ? { from: customFrom, to: customTo } : getReportRange(period, anchor), [period, anchor, customFrom, customTo]);
+  const validRange = range.from <= range.to;
+  const report = useMemo(() => buildSalesReport(orders, range), [orders, range]);
+  useEffect(() => {setVisible(50); setMessage(''); setError('');}, [period, anchor]);
+  const move = (direction: number) => {
+    const date = new Date(anchor + 'T00:00:00Z');
+    if (period === 'day' || period === 'week') date.setUTCDate(date.getUTCDate() + direction * (period === 'day' ? 1 : 7));
+    else if (period === 'month') {date.setUTCDate(1); date.setUTCMonth(date.getUTCMonth() + direction);}
+    else {date.setUTCDate(1); date.setUTCMonth(0); date.setUTCFullYear(date.getUTCFullYear() + direction);}
+    setAnchor(date.toISOString().slice(0, 10));
   };
-  const dailyBreakdown = stats?.daily || [];
-  const avgPerOrder = displayTotals.orders > 0 ? displayTotals.revenue / displayTotals.orders : 0;
-  const avgBowlsPerDay = dailyBreakdown.length > 0 ? displayTotals.bowls / dailyBreakdown.length : displayTotals.bowls;
-
-  const completedOrders = orders.filter(o => o.status === 'Completed');
-
-  const handleExport = async () => {
-    if (ordersInRange.length === 0 || isExporting) return;
-    setIsExporting(true);
-    setExportMessage('');
-    setExportError('');
+  const exportReport = async () => {
+    if (isExporting || !validRange) return;
+    setIsExporting(true); setMessage(''); setError('');
     try {
       const {exportOrdersXlsx} = await import('../domain/export-orders-xlsx');
-      const filename = `CJ-POS-orders-${currentRange.from}-to-${currentRange.to}.xlsx`;
-      await exportOrdersXlsx(ordersInRange, settings, filename);
-      setExportMessage(`Downloaded ${ordersInRange.length} order${ordersInRange.length === 1 ? '' : 's'} / 已下载 ${ordersInRange.length} 张订单`);
-    } catch (error) {
-      console.error('[Excel export] Failed:', error);
-      setExportError('Could not create the Excel file. Please try again. / 无法建立 Excel，请重试。');
-    } finally {
-      setIsExporting(false);
-    }
+      const result = await exportOrdersXlsx(orders, settings, 'CJ-POS-receipts-' + range.from + '-to-' + range.to + '.xlsx', range, language);
+      setMessage(result.destination === 'native' ? t('Excel saved.', 'Excel 已保存。', 'Excel disimpan.') : t('Excel download started.', '已发起 Excel 下载。', 'Muat turun Excel dimulakan.'));
+    } catch (failure) {setError(fileErrorMessage(failure, language));}
+    finally {setIsExporting(false);}
   };
-
-  const paymentMethodLabel = (method?: string) => {
-    switch (method) {
-      case 'Cash': return 'Cash';
-      case 'QR Pay': return 'QR Pay';
-      default: return '—';
-    }
-  };
-
-  const tabs: { id: DateRange; label: string }[] = [
-    { id: 'today', label: '日 Day' },
-    { id: 'week', label: '周 Week' },
-    { id: 'month', label: '月 Month' },
-    { id: 'year', label: '年 Year' },
+  const periods: {id: ReportPeriod | 'custom'; name: string}[] = [
+    {id: 'day', name: t('Day', '日', 'Hari')}, {id: 'week', name: t('Week', '周', 'Minggu')},
+    {id: 'month', name: t('Month', '月', 'Bulan')}, {id: 'year', name: t('Year', '年', 'Tahun')},
+    {id: 'custom', name: t('Range', '自选', 'Julat')},
   ];
-
-  return (
-    <div className="min-w-0 space-y-6">
-      {/* Date Range Tabs */}
-      <div className="flex bg-gray-200 dark:bg-zinc-800 p-1 rounded-xl">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setDateRange(tab.id)}
-            aria-pressed={dateRange === tab.id}
-            className={`min-h-11 min-w-0 flex-1 rounded-lg px-1 py-2.5 text-xs font-bold leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-950 ${
-              dateRange === tab.id
-                ? 'bg-primary text-on-primary shadow-sm hover:bg-primary-hover'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Range Label + Export Actions */}
-      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-gray-500 dark:text-gray-400">
-          <Calendar aria-hidden="true" className="h-4 w-4 shrink-0" />
-          <span className="min-w-0 text-sm font-medium [overflow-wrap:anywhere]">{getDateRange(dateRange).label}: {getDateRange(dateRange).from} → {getDateRange(dateRange).to}</span>
-          {isLoadingStats && <span className="animate-pulse text-xs font-bold text-emphasis dark:text-primary">Syncing...</span>}
-        </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={ordersInRange.length === 0 || isExporting}
-            className="flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-extrabold text-on-primary transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
-          >
-            {isExporting
-              ? <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" />
-              : <FileSpreadsheet aria-hidden="true" className="h-4 w-4" />}
-            {isExporting ? 'Creating… / 建立中…' : `Excel (${ordersInRange.length})`}
-          </button>
-          {SHEET_URL && (
-            <a
-              href={SHEET_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-bold text-green-700 transition-colors hover:bg-green-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2 dark:border-green-800/30 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 dark:focus-visible:ring-green-400 dark:focus-visible:ring-offset-zinc-950 sm:w-auto"
-            >
-              <ExternalLink aria-hidden="true" className="w-4 h-4" />
-              Open Google Sheet
-            </a>
-          )}
-        </div>
-      </div>
-
-      <div aria-live="polite" className="min-h-5">
-        {exportMessage && <p className="text-sm font-semibold text-green-700 dark:text-green-400">{exportMessage}</p>}
-        {exportError && <p role="alert" className="text-sm font-semibold text-red-600 dark:text-red-400">{exportError}</p>}
-      </div>
-
-      {/* Dashboard KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 min-[360px]:grid-cols-2 lg:grid-cols-4">
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Bowls / 碗数</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20">
-              <ChefHat aria-hidden="true" className="h-4 w-4 text-emphasis dark:text-primary" />
-            </div>
-          </div>
-          <div className="text-3xl font-extrabold tabular-nums text-gray-900 dark:text-white">{displayTotals.bowls}</div>
-          {dateRange !== 'today' && dailyBreakdown.length > 1 && (
-            <p className="text-xs text-gray-400 mt-1">≈ {avgBowlsPerDay.toFixed(0)} /day</p>
-          )}
-        </div>
-
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Revenue / 营收</span>
-            <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-              <DollarSign aria-hidden="true" className="w-4 h-4 text-green-600 dark:text-green-400" />
-            </div>
-          </div>
-          <div className="text-3xl font-extrabold tabular-nums text-emphasis dark:text-primary">{formatCurrency(displayTotals.revenue)}</div>
-        </div>
-
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Orders / 订单</span>
-            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-              <TrendingUp aria-hidden="true" className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            </div>
-          </div>
-          <div className="text-3xl font-extrabold tabular-nums text-gray-900 dark:text-white">{displayTotals.orders}</div>
-        </div>
-
-        <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-800">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Avg / 均值</span>
-            <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-              <Banknote aria-hidden="true" className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-            </div>
-          </div>
-          <div className="text-3xl font-extrabold tabular-nums text-emphasis dark:text-primary">
-            {avgPerOrder > 0 ? formatCurrency(avgPerOrder) : 'RM 0.00'}
-          </div>
-          <p className="text-xs text-gray-400 mt-1">per order</p>
-        </div>
-      </div>
-
-      {/* Daily Breakdown (for week/month/year views) */}
-      {dateRange !== 'today' && dailyBreakdown.length > 0 && (
-        <div>
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-            <Calendar aria-hidden="true" className="w-5 h-5" />
-            Daily Breakdown / 每日明细
-          </h3>
-          <div className="max-w-full overflow-x-auto overscroll-x-contain rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <table className="w-full min-w-[36rem]">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-950/50">
-                  <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Date</th>
-                  <th className="text-right px-4 py-3 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Bowls</th>
-                  <th className="text-right px-4 py-3 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Revenue</th>
-                  <th className="text-right px-4 py-3 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Orders</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dailyBreakdown.map(day => (
-                  <tr key={day.date} className="border-b border-gray-50 dark:border-zinc-800/50 last:border-0 hover:bg-gray-50 dark:hover:bg-zinc-800/30 transition-colors">
-                    <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white">{day.date}</td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700 dark:text-gray-300 font-medium">{day.bowls}</td>
-                    <td className="px-4 py-3 text-sm text-right font-bold tabular-nums text-emphasis dark:text-primary">{formatCurrency(day.revenue)}</td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-600 dark:text-gray-400">{day.orders}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Recent Completed Orders (local) */}
-      <div>
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-3">
-          <History aria-hidden="true" className="w-5 h-5" />
-          Recent Orders / 近期订单
-        </h2>
-
-        {completedOrders.length === 0 ? (
-          <div className="text-center py-12 text-gray-400 dark:text-gray-500">
-            <p>No completed orders yet. / 暂无已完成订单。</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {completedOrders.slice(0, 20).map(order => (
-              <div key={order.local_order_id} className="flex min-w-0 flex-col justify-between gap-4 rounded-xl border-y border-r border-l-4 border-gray-100 border-l-green-500 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:flex-row sm:items-center">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{order.order_id}</span>
-                    <span className="text-sm font-bold text-gray-900 dark:text-white">
-                      {order.order_type === 'Dine-in' ? `Table ${order.table_no}` : 'Takeaway'}
-                    </span>
-                    {order.payment_method && (
-                      <span className="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold uppercase text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                        {paymentMethodLabel(order.payment_method)}
-                      </span>
-                    )}
-                    {order.synced && (
-                      <span className="whitespace-nowrap rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Synced</span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-1">{order.items_summary}</p>
-                </div>
-                <div className="flex items-center justify-between sm:flex-col sm:items-end gap-1 border-t sm:border-t-0 border-gray-100 dark:border-zinc-800 pt-3 sm:pt-0">
-                  <span className="text-xs text-gray-400">{order.timestamp}</span>
-                  <span className="font-bold tabular-nums text-emphasis dark:text-primary">{formatCurrency(order.total_amount)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+  const cards = [
+    [t('Receipts', '实收', 'Terimaan'), formatCurrency(report.totals.revenue)],
+    [t('Paid orders', '收款订单', 'Pesanan dibayar'), String(report.totals.orders)],
+    [t('Items sold', '已售件数', 'Item terjual'), String(report.totals.quantity)],
+    [t('Average per order', '平均每单', 'Purata setiap pesanan'), formatCurrency(report.totals.orders ? report.totals.revenue / report.totals.orders : 0)],
+  ];
+  return <div className="min-w-0 space-y-5">
+    <div className="grid grid-cols-3 gap-1 rounded-xl bg-zinc-800 p-1 sm:grid-cols-5">
+      {periods.map(tab => <button type="button" key={tab.id} onClick={() => setPeriod(tab.id)} aria-pressed={period === tab.id} className={'min-h-11 min-w-0 rounded-lg px-2 py-2 text-sm font-bold ' + (period === tab.id ? 'bg-primary text-black' : 'text-zinc-300')}>{tab.name}</button>)}
     </div>
-  );
+    <div className="flex min-w-0 flex-wrap items-end gap-3">
+      {period === 'custom' ? <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="min-w-0 text-sm text-zinc-400">{t('From','开始','Dari')}<input type="date" value={customFrom} onChange={e => {if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setCustomFrom(e.target.value);}} className="mt-1 block min-h-12 w-full min-w-0 rounded-xl border border-zinc-600 bg-zinc-900 px-3 text-white" /></label>
+        <label className="min-w-0 text-sm text-zinc-400">{t('To','结束','Hingga')}<input type="date" value={customTo} onChange={e => {if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setCustomTo(e.target.value);}} className="mt-1 block min-h-12 w-full min-w-0 rounded-xl border border-zinc-600 bg-zinc-900 px-3 text-white" /></label>
+      </div> : <div className="flex w-full min-w-0 flex-none items-end gap-2 sm:w-auto sm:min-w-[18rem] sm:flex-1">
+        <button type="button" onClick={() => move(-1)} aria-label={t('Previous period', '上一个期间', 'Tempoh sebelumnya')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-600"><ChevronLeft size={20}/></button>
+        <label className="min-w-0 flex-1 text-sm text-zinc-400">{t('Date in this period', '选择期间内的日期', 'Tarikh dalam tempoh')}
+          <input type="date" value={anchor} onChange={event => {if (/^\d{4}-\d{2}-\d{2}$/.test(event.target.value)) setAnchor(event.target.value);}} className="mt-1 block min-h-11 w-full min-w-0 rounded-xl border border-zinc-600 bg-zinc-900 px-3 text-base text-white"/>
+        </label>
+        <button type="button" onClick={() => move(1)} aria-label={t('Next period', '下一个期间', 'Tempoh seterusnya')} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-600"><ChevronRight size={20}/></button>
+      </div>}
+      <button type="button" onClick={() => {setPeriod('day');setAnchor(reportingDate());}} className="min-h-11 rounded-xl border border-zinc-600 px-3 text-sm font-bold">{t('Today', '今天', 'Hari ini')}</button>
+      <button type="button" onClick={exportReport} disabled={isExporting || !validRange} className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 font-bold text-black disabled:opacity-50">{isExporting ? <LoaderCircle className="h-4 w-4 animate-spin"/> : <FileSpreadsheet className="h-4 w-4"/>}{isExporting ? t('Saving…', '保存中…', 'Menyimpan…') : t('Export Excel', '导出 Excel', 'Eksport Excel')}</button>
+    </div>
+    <p className="flex flex-wrap items-center gap-2 text-sm text-zinc-400"><Calendar className="h-4 w-4 shrink-0"/>{range.from} → {range.to}</p>
+    {!validRange && <p role="alert" className="text-red-400">{t('The end date must be on or after the start date.','结束日期不能早于开始日期。','Tarikh akhir mesti selepas atau sama dengan tarikh mula.')}</p>}
+    <p className="text-sm leading-relaxed text-zinc-400">{t('Receipts follow the payment date in Malaysia time. Unpaid and cancelled orders do not count.', '实收按马来西亚时间的收款日期统计，未付款及已取消订单不计入。', 'Terimaan mengikut tarikh bayaran dalam waktu Malaysia. Pesanan belum dibayar dan dibatalkan tidak dikira.')}</p>
+    {report.legacyPaymentCount > 0 && <p className="rounded-xl bg-amber-950/40 p-3 text-sm text-amber-300">{t('Some older paid records have no receipt time and are assigned to their order date.', '部分旧已付记录没有收款时间，暂按下单日期归属。', 'Sesetengah rekod lama tiada masa terimaan dan menggunakan tarikh pesanan.')}</p>}
+    {message && <p role="status" className="text-sm text-green-400">{message}</p>}
+    {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      {cards.map(([label, value]) => <div key={label} className="min-w-0 rounded-2xl border border-zinc-700 bg-zinc-900 p-4">
+        <div className="text-sm text-zinc-400">{label}</div><div className="mt-3 break-words text-[clamp(1.25rem,3vw,2rem)] font-extrabold tabular-nums leading-tight text-primary">{value}</div>
+      </div>)}
+    </div>
+    <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-xl border border-zinc-800 p-3 text-sm">
+      <span>{t('Cash', '现金', 'Tunai')}: <strong>{formatCurrency(report.totals.cash)}</strong></span>
+      <span>{t('QR Pay', '扫码收款', 'Bayaran QR')}: <strong>{formatCurrency(report.totals.qr)}</strong></span>
+    </div>
+    {period !== 'day' && <section className="space-y-3">
+      <h2 className="text-lg font-bold">{t('Daily receipts', '每日实收', 'Terimaan harian')}</h2>
+      {report.daily.length === 0 ? <p className="text-sm text-zinc-400">{t('No payments in this period.', '这个期间没有收款记录。', 'Tiada bayaran dalam tempoh ini.')}</p> : <div className="divide-y divide-zinc-800 rounded-xl border border-zinc-800">
+        {report.daily.map(day => <div key={day.date} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm"><span>{day.date}</span><span className="text-zinc-400">{day.orders} {t('orders', '单', 'pesanan')} · {day.quantity} {t('items', '件', 'item')}</span><strong className="tabular-nums text-primary">{formatCurrency(day.revenue)}</strong></div>)}
+      </div>}
+    </section>}
+    <section className="space-y-3">
+      <h2 className="text-lg font-bold">{t('Orders in this period', '本期间订单', 'Pesanan dalam tempoh')} ({report.orders.length})</h2>
+      <p className="text-sm text-zinc-400">{t('Orders created or paid in this period. Each order appears once.', '期间内下单或收款的订单，每单只显示一次。', 'Pesanan dibuat atau dibayar dalam tempoh ini. Setiap pesanan dipaparkan sekali.')}</p>
+      {report.orders.length === 0 && <p className="py-5 text-sm text-zinc-400">{t('No orders in this period.', '这个期间没有订单。', 'Tiada pesanan dalam tempoh ini.')}</p>}
+      {[...report.orders].reverse().slice(0, visible).map(order => {
+        const counted = isSalesOrder(order) && inReportRange(receiptDate(order), range);
+        const summary = order.items.length ? order.items.map(item => (localized(item.itemName, language) || localized(settings.menuItems.find(menu => menu.id === item.menuItemId)?.name, language) || item.menuItemId) + ' × ' + item.quantity).join(', ') : order.items_summary;
+        return <article key={order.local_order_id} className="min-w-0 space-y-2 rounded-xl border border-zinc-700 bg-zinc-900 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2"><strong>#{order.order_id}</strong><span className="text-sm text-zinc-400">{orderStatusLabel(language, order.status)} · {paymentLabel(language, order.paid ? order.payment_method : undefined)}</span></div>
+          <p className="break-words text-sm">{summary}</p>
+          <div className="flex flex-wrap items-end justify-between gap-2 text-sm">
+            <div className="space-y-1 text-zinc-400"><p>{t('Ordered: ', '下单：', 'Dipesan: ')}{order.timestamp}</p>{order.paid && <p>{t('Received: ', '收款：', 'Diterima: ')}{order.paid_at ? new Date(order.paid_at).toLocaleString(language === 'zh' ? 'zh-MY' : language === 'ms' ? 'ms-MY' : 'en-MY', {timeZone: 'Asia/Kuala_Lumpur'}) : t('Time unknown (legacy)', '时间未知（旧记录）', 'Masa tidak diketahui (lama)')}</p>}</div>
+            <div className="text-right"><strong className="text-lg tabular-nums">{formatCurrency(order.total_amount)}</strong><p className={counted ? 'text-green-400' : 'text-zinc-400'}>{counted ? t('Included in receipts', '计入本期实收', 'Termasuk terimaan') : t('Not included in receipts', '不计入本期实收', 'Tidak termasuk terimaan')}</p></div>
+          </div>
+        </article>;
+      })}
+      {report.orders.length > visible && <button type="button" onClick={() => setVisible(count => count + 50)} className="min-h-11 w-full rounded-xl border border-zinc-700 py-2 font-bold">{t('Show more', '显示更多', 'Tunjuk lagi')}</button>}
+    </section>
+    <DataTools/>
+  </div>;
 }

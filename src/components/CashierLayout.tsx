@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useStore } from '../store';
-import { LogOut, House, Store, Clock, History, Wifi, WifiOff, Lock, Eye, EyeOff, Settings, KeyRound, ChefHat } from 'lucide-react';
+import { Store, History, Lock, Eye, EyeOff, Settings, KeyRound, ChefHat, CreditCard } from 'lucide-react';
 import CashierRegister from './CashierRegister';
 import CashierActive from './CashierActive';
 import CashierHistory from './CashierHistory';
@@ -9,9 +9,12 @@ import KitchenDisplay from './KitchenDisplay';
 import { format } from 'date-fns';
 import { APP_ICON_SRC } from '../brand';
 import { IS_PUBLIC_DEMO } from '../demo-mode';
+import { tr, localized } from '../i18n';
+import LanguageSelector from './LanguageSelector';
 
 const PASSWORD_KEY = 'golden_sea_laksa_admin_pw';
 const DEFAULT_PASSWORD = 'admin123';
+const IS_ANDROID_APP = import.meta.env.VITE_ANDROID_APP === 'true';
 
 function getAdminPassword(): string {
   return localStorage.getItem(PASSWORD_KEY) || DEFAULT_PASSWORD;
@@ -24,15 +27,22 @@ interface Props {
 type CashierTab = 'register' | 'active' | 'kitchen' | 'history' | 'edit';
 
 function getInitialCashierTab(): CashierTab {
-  const routeTab = window.location.hash.split('/')[2];
+  const routeTab = window.location.hash.split('/')[2]?.split('?')[0];
   return routeTab === 'active' || routeTab === 'kitchen' || routeTab === 'history' || routeTab === 'edit'
     ? routeTab
     : 'register';
 }
 
 export default function CashierLayout({ onLogout }: Props) {
-  const { isOnline, orders, settings } = useStore();
+  const { orders, settings, language, changeLanguage, saveStatus, ready, storageError } = useStore();
+  const t = (en: string, zh: string, ms: string) => tr(language, en, zh, ms);
   const [activeTab, setActiveTab] = useState<CashierTab>(getInitialCashierTab);
+  const [editDirty, setEditDirty] = useState(false);
+  useEffect(() => {
+    const updateTab = () => setActiveTab(getInitialCashierTab());
+    window.addEventListener('hashchange', updateTab);
+    return () => window.removeEventListener('hashchange', updateTab);
+  }, []);
   // History password gate
   const [historyUnlocked, setHistoryUnlocked] = useState(false);
   const [historyPw, setHistoryPw] = useState('');
@@ -48,8 +58,10 @@ export default function CashierLayout({ onLogout }: Props) {
   const [pwSuccess, setPwSuccess] = useState(false);
   const hasHistoryAccess = IS_PUBLIC_DEMO || historyUnlocked;
   const kitchenOrderCount = orders.filter(order => order.status === 'Pending' || order.status === 'Preparing').length;
+  const paymentDueCount = orders.filter(order => !order.paid && order.status !== 'Cancelled').length;
 
   const selectTab = (tab: CashierTab) => {
+    if (tab !== activeTab && activeTab === 'edit' && editDirty && !window.confirm(t('Leave without saving your menu changes?', '尚未保存菜单更改，确定离开？', 'Keluar tanpa menyimpan perubahan menu?'))) return;
     setActiveTab(tab);
     const nextHash = tab === 'register' ? '#/cashier' : `#/cashier/${tab}`;
     window.history.replaceState(null, '', nextHash);
@@ -61,7 +73,7 @@ export default function CashierLayout({ onLogout }: Props) {
       setHistoryUnlocked(true);
       setHistoryPwError('');
     } else {
-      setHistoryPwError('密码错误 / Wrong password');
+      setHistoryPwError(t('Wrong password', '密码错误', 'Kata laluan salah'));
     }
   };
 
@@ -69,19 +81,19 @@ export default function CashierLayout({ onLogout }: Props) {
     setPwMsg('');
     setPwSuccess(false);
     if (oldPw !== getAdminPassword()) {
-      setPwMsg('旧密码错误 / Old password is wrong');
+      setPwMsg(t('Old password is wrong', '旧密码错误', 'Kata laluan lama salah'));
       return;
     }
     if (!newPw1 || newPw1.length < 4) {
-      setPwMsg('新密码至少4位 / New password must be at least 4 chars');
+      setPwMsg(t('New password must be at least 4 characters', '新密码至少4位', 'Kata laluan baharu mesti sekurang-kurangnya 4 aksara'));
       return;
     }
     if (newPw1 !== newPw2) {
-      setPwMsg('两次输入不一致 / Passwords do not match');
+      setPwMsg(t('Passwords do not match', '两次输入不一致', 'Kata laluan tidak sepadan'));
       return;
     }
     localStorage.setItem(PASSWORD_KEY, newPw1);
-    setPwMsg('密码已更新 / Password updated!');
+    setPwMsg(t('Password updated', '密码已更新', 'Kata laluan dikemas kini'));
     setPwSuccess(true);
     setOldPw('');
     setNewPw1('');
@@ -101,8 +113,8 @@ export default function CashierLayout({ onLogout }: Props) {
           <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/20 shadow-lg shadow-primary/10">
             <KeyRound aria-hidden="true" className="h-8 w-8 text-emphasis dark:text-primary" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Change Password</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">修改历史记录密码</p>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{t('Change password', '修改密码', 'Tukar kata laluan')}</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{t('Change the history password', '修改历史记录密码', 'Tukar kata laluan sejarah')}</p>
           
           <div className="w-full max-w-xs space-y-4">
             <div>
@@ -111,9 +123,9 @@ export default function CashierLayout({ onLogout }: Props) {
                 autoComplete="current-password"
                 value={oldPw}
                 onChange={e => setOldPw(e.target.value)}
-                aria-label="Old password / 旧密码"
+                aria-label={t('Old password', '旧密码', 'Kata laluan lama')}
                 className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-gray-900 dark:text-white font-medium focus:ring-2 focus:ring-primary outline-none"
-                placeholder="Old Password / 旧密码"
+                placeholder={t('Old password', '旧密码', 'Kata laluan lama')}
               />
             </div>
             <div>
@@ -122,9 +134,9 @@ export default function CashierLayout({ onLogout }: Props) {
                 autoComplete="new-password"
                 value={newPw1}
                 onChange={e => setNewPw1(e.target.value)}
-                aria-label="New password / 新密码"
+                aria-label={t('New password', '新密码', 'Kata laluan baharu')}
                 className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-gray-900 dark:text-white font-medium focus:ring-2 focus:ring-primary outline-none"
-                placeholder="New Password / 新密码"
+                placeholder={t('New password', '新密码', 'Kata laluan baharu')}
               />
             </div>
             <div>
@@ -133,9 +145,9 @@ export default function CashierLayout({ onLogout }: Props) {
                 autoComplete="new-password"
                 value={newPw2}
                 onChange={e => setNewPw2(e.target.value)}
-                aria-label="Confirm new password / 确认新密码"
+                aria-label={t('Confirm new password', '确认新密码', 'Sahkan kata laluan baharu')}
                 className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-gray-900 dark:text-white font-medium focus:ring-2 focus:ring-primary outline-none"
-                placeholder="Confirm Password / 确认新密码"
+                placeholder={t('Confirm new password', '确认新密码', 'Sahkan kata laluan baharu')}
               />
             </div>
 
@@ -150,7 +162,7 @@ export default function CashierLayout({ onLogout }: Props) {
               onClick={handleChangePassword}
               className="w-full rounded-xl bg-primary py-3 font-bold text-on-primary shadow-lg shadow-primary/20 transition-colors hover:bg-primary-hover active:scale-[0.98]"
             >
-              Confirm / 确认修改
+              {t('Confirm', '确认修改', 'Sahkan')}
             </button>
 
             <button
@@ -158,7 +170,7 @@ export default function CashierLayout({ onLogout }: Props) {
               onClick={() => { setShowForgotPw(false); setPwMsg(''); }}
               className="w-full py-3 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-600 dark:text-gray-400 font-bold rounded-xl transition-colors"
             >
-              Back / 返回
+              {t('Back', '返回', 'Kembali')}
             </button>
           </div>
         </div>
@@ -170,8 +182,8 @@ export default function CashierLayout({ onLogout }: Props) {
         <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/20">
           <Lock aria-hidden="true" className="h-8 w-8 text-emphasis dark:text-primary" />
         </div>
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">History Locked</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">历史记录需要密码查看</p>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{t('History locked', '历史记录已锁定', 'Sejarah dikunci')}</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{t('Enter the password to view history', '请输入密码查看历史记录', 'Masukkan kata laluan untuk melihat sejarah')}</p>
         
         <form onSubmit={handleHistoryLogin} className="w-full max-w-xs space-y-3">
           <div className="relative">
@@ -180,15 +192,15 @@ export default function CashierLayout({ onLogout }: Props) {
               autoComplete="current-password"
               value={historyPw}
               onChange={e => { setHistoryPw(e.target.value); setHistoryPwError(''); }}
-              placeholder="Enter password / 输入密码"
-              aria-label="History password / 历史记录密码"
+              placeholder={t('Enter password', '输入密码', 'Masukkan kata laluan')}
+              aria-label={t('History password', '历史记录密码', 'Kata laluan sejarah')}
               className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 pr-12 py-3 text-gray-900 dark:text-white font-medium focus:ring-2 focus:ring-primary outline-none"
               autoFocus
             />
             <button
               type="button"
               onClick={() => setShowPw(!showPw)}
-              aria-label={showPw ? 'Hide password' : 'Show password'}
+              aria-label={showPw ? t('Hide password', '隐藏密码', 'Sembunyikan kata laluan') : t('Show password', '显示密码', 'Tunjukkan kata laluan')}
               className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-zinc-800 dark:hover:text-gray-200"
             >
               {showPw ? <EyeOff aria-hidden="true" className="w-4 h-4" /> : <Eye aria-hidden="true" className="w-4 h-4" />}
@@ -201,14 +213,14 @@ export default function CashierLayout({ onLogout }: Props) {
             type="submit"
             className="w-full rounded-xl bg-primary py-3 font-bold text-on-primary transition-colors hover:bg-primary-hover"
           >
-            Unlock / 解锁
+            {t('Unlock', '解锁', 'Buka kunci')}
           </button>
           <button
             type="button"
             onClick={() => setShowForgotPw(true)}
             className="min-h-11 w-full pt-4 text-center text-sm font-medium text-gray-500 transition-colors hover:text-emphasis dark:text-gray-400 dark:hover:text-primary"
           >
-            Forgot Password? / 忘记密码？
+            {t('Change password', '修改密码', 'Tukar kata laluan')}
           </button>
         </form>
       </div>
@@ -216,49 +228,41 @@ export default function CashierLayout({ onLogout }: Props) {
   };
 
   return (
-    <div className="min-h-dvh bg-white dark:bg-black flex flex-col">
+    <div className="pos-workspace min-h-dvh bg-white dark:bg-black flex flex-col">
       {/* Header */}
       <header className="pt-safe sticky top-0 z-40 border-b border-gray-200 bg-white/95 px-4 backdrop-blur-md dark:border-zinc-800 dark:bg-black/90">
-        <div className="max-w-7xl mx-auto flex items-center justify-between py-3">
-          <div className="flex items-center gap-3">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 py-3">
+          <div className="flex min-w-0 flex-1 basis-64 items-center gap-3">
             <img
               src={APP_ICON_SRC}
               alt=""
               aria-hidden="true"
               className="h-10 w-10 rounded-xl object-cover shadow-sm ring-1 ring-black/10 dark:ring-white/15"
             />
-            <div>
-              <h1 className="text-lg font-bold text-gray-900 dark:text-white leading-tight">
-                {settings.shopNameEn}
+            <div className="min-w-0">
+              <h1 className="break-words text-lg font-bold text-gray-900 dark:text-white leading-tight">
+                {localized({ en: settings.shopNameEn, zh: settings.shopNameZh, ms: settings.shopNameMs }, language)}
               </h1>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                  收银台 · {format(new Date(), 'yyyy-MM-dd')}
+                  {t('Register', '收银台', 'Daftar')} · {format(new Date(), 'yyyy-MM-dd')}
                 </span>
-                <span className="flex items-center gap-1">
-                  {isOnline ? (
-                    <Wifi aria-hidden="true" className="w-3 h-3 text-green-500" />
-                  ) : (
-                    <WifiOff aria-hidden="true" className="w-3 h-3 text-red-500" />
-                  )}
-                  <span className={`text-[10px] font-bold ${isOnline ? 'text-green-600' : 'text-red-600'}`}>
-                    {isOnline ? 'Online' : 'Offline'}
-                  </span>
+                <span role="status" className={`text-sm font-semibold ${storageError ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                  {!ready ? t('Loading…', '读取中…', 'Memuatkan…') : storageError ? t('Save failed', '保存失败', 'Gagal disimpan') : saveStatus === 'saving' ? t('Saving…', '保存中…', 'Menyimpan…') : activeTab === 'edit' && editDirty ? t('Unsaved changes', '有未保存的更改', 'Perubahan belum disimpan') : t('Saved on this device', '已保存到本机', 'Disimpan pada peranti ini')}
                 </span>
               </div>
             </div>
           </div>
-          <button 
-            type="button"
-            onClick={onLogout}
-            aria-label={IS_PUBLIC_DEMO ? 'Return to product home' : 'Log out and return to product home'}
-            className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-gray-600 dark:text-gray-300"
-            title="Return to Home"
-          >
-            {IS_PUBLIC_DEMO
-              ? <House aria-hidden="true" className="w-5 h-5" />
-              : <LogOut aria-hidden="true" className="w-5 h-5" />}
-          </button>
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <button type="button" onClick={() => {
+              if (activeTab === 'edit' && editDirty && !window.confirm(t('Leave without saving your menu changes?', '尚未保存菜单更改，确定离开？', 'Keluar tanpa menyimpan perubahan menu?'))) return;
+              if (IS_ANDROID_APP) onLogout(); else window.location.hash = '#/order';
+            }}
+              className="min-h-12 rounded-xl border border-zinc-300 px-3 text-base font-semibold text-zinc-800 hover:bg-primary/10 dark:border-zinc-700 dark:text-white">
+              {t('Customer View', '顾客模式', 'Paparan pelanggan')}
+            </button>
+            <LanguageSelector language={language} onChange={changeLanguage} />
+          </div>
         </div>
       </header>
 
@@ -266,15 +270,15 @@ export default function CashierLayout({ onLogout }: Props) {
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 pb-24">
         {activeTab === 'register' && <CashierRegister />}
         {activeTab === 'active' && <CashierActive />}
-        {activeTab === 'kitchen' && <KitchenDisplay embedded />}
-        {activeTab === 'edit' && <EditMenu />}
+        {activeTab === 'kitchen' && <KitchenDisplay embedded onGoToPayments={() => selectTab('active')} />}
+        {activeTab === 'edit' && <EditMenu onDirtyChange={setEditDirty} />}
         {activeTab === 'history' && (
           hasHistoryAccess ? <CashierHistory /> : <HistoryPasswordGate />
         )}
       </main>
 
       {/* Bottom Navigation */}
-      <nav aria-label="Staff console navigation" className="fixed bottom-0 left-0 right-0 bg-white dark:bg-black border-t border-gray-200 dark:border-zinc-800 pb-safe z-40">
+      <nav aria-label={t('Staff navigation', '店员导航', 'Navigasi kakitangan')} className="fixed bottom-0 left-0 right-0 bg-white dark:bg-black border-t border-gray-200 dark:border-zinc-800 pb-safe z-40">
         <div className="max-w-7xl mx-auto flex justify-between items-center px-2">
           <button
             type="button"
@@ -287,28 +291,36 @@ export default function CashierLayout({ onLogout }: Props) {
             }`}
           >
             <Store aria-hidden="true" className={`w-6 h-6 ${activeTab === 'register' ? 'fill-current' : ''}`} />
-            <span className="text-xs font-bold">Register</span>
+            <span className="text-sm font-bold">{t('Register', '收银台', 'Daftar')}</span>
           </button>
           
           <button
             type="button"
             onClick={() => selectTab('active')}
             aria-pressed={activeTab === 'active'}
-            className={`mx-1 min-h-14 flex-1 flex flex-col items-center justify-center rounded-xl py-2 gap-1 transition-colors ${
+            aria-label={t(`Payments, ${paymentDueCount} orders due`, `收款，${paymentDueCount}单待付款`, `Bayaran, ${paymentDueCount} pesanan belum dibayar`)}
+            className={`relative mx-1 min-h-14 flex-1 flex flex-col items-center justify-center rounded-xl py-2 gap-1 transition-colors ${
               activeTab === 'active' 
                 ? 'bg-primary text-on-primary'
                 : 'text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white'
             }`}
           >
-            <Clock aria-hidden="true" className={`w-6 h-6 ${activeTab === 'active' ? 'fill-current' : ''}`} />
-            <span className="text-xs font-bold">Active</span>
+            <CreditCard aria-hidden="true" className={`w-6 h-6 ${activeTab === 'active' ? 'fill-current' : ''}`} />
+            <span className="text-sm font-bold">{t('Pay', '收款', 'Bayar')}</span>
+            {paymentDueCount > 0 && (
+              <span className={`absolute right-1.5 top-1 min-w-5 rounded-full px-1 text-center text-[10px] font-extrabold tabular-nums ${
+                activeTab === 'active' ? 'bg-zinc-950 text-primary' : 'bg-amber-600 text-white'
+              }`}>
+                {paymentDueCount > 99 ? '99+' : paymentDueCount}
+              </span>
+            )}
           </button>
 
           <button
             type="button"
             onClick={() => selectTab('kitchen')}
             aria-pressed={activeTab === 'kitchen'}
-            aria-label={`Kitchen display, ${kitchenOrderCount} active orders`}
+            aria-label={t(`Kitchen, ${kitchenOrderCount} active orders`, `备餐，${kitchenOrderCount}单待处理`, `Dapur, ${kitchenOrderCount} pesanan aktif`)}
             className={`relative mx-1 min-h-14 flex-1 flex flex-col items-center justify-center rounded-xl py-2 gap-1 transition-colors ${
               activeTab === 'kitchen'
                 ? 'bg-primary text-on-primary'
@@ -316,7 +328,7 @@ export default function CashierLayout({ onLogout }: Props) {
             }`}
           >
             <ChefHat aria-hidden="true" className={`w-6 h-6 ${activeTab === 'kitchen' ? 'fill-current' : ''}`} />
-            <span className="text-[11px] font-bold min-[390px]:text-xs">Kitchen</span>
+            <span className="text-sm font-bold">{t('Kitchen', '备餐', 'Dapur')}</span>
             {kitchenOrderCount > 0 && (
               <span className={`absolute right-1.5 top-1 min-w-5 rounded-full px-1 text-center text-[10px] font-extrabold tabular-nums ${
                 activeTab === 'kitchen' ? 'bg-zinc-950 text-primary' : 'bg-red-600 text-white'
@@ -337,7 +349,7 @@ export default function CashierLayout({ onLogout }: Props) {
             }`}
           >
             <History aria-hidden="true" className={`w-6 h-6 ${activeTab === 'history' ? 'fill-current' : ''}`} />
-            <span className="text-xs font-bold">History</span>
+            <span className="text-sm font-bold">{t('History', '历史', 'Sejarah')}</span>
           </button>
           
           <button
@@ -351,7 +363,7 @@ export default function CashierLayout({ onLogout }: Props) {
             }`}
           >
             <Settings aria-hidden="true" className={`w-6 h-6 ${activeTab === 'edit' ? 'fill-current' : ''}`} />
-            <span className="text-xs font-bold">Edit</span>
+            <span className="text-sm font-bold">{t('Edit', '编辑', 'Sunting')}</span>
           </button>
         </div>
       </nav>

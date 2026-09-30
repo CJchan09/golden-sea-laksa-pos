@@ -8,6 +8,10 @@ import {
   X,
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { useStore } from '../store';
+import { tr, localized } from '../i18n';
+import type { Language } from '../types';
+import { LocalizedNameEditor } from './LanguageSelector';
 import type { OptionChoice, OptionGroup } from '../data/app-schema';
 import { fromRinggit, senToDecimalString } from '../domain/money';
 import {
@@ -32,6 +36,7 @@ interface SpecialChoiceEditorState {
 interface ChoiceDraft {
   nameEn: string;
   nameZh: string;
+  nameMs: string;
   price: string;
 }
 
@@ -76,22 +81,22 @@ function choiceToDraft(choice?: OptionChoice): ChoiceDraft {
   return {
     nameEn: choice?.names.en ?? '',
     nameZh: choice?.names.zh ?? '',
+    nameMs: choice?.names.ms ?? '',
     price: choice ? senToDecimalString(choice.priceDeltaSen) : '0.00',
   };
 }
 
-function validateChoiceDraft(draft: ChoiceDraft): ChoiceErrors {
+function validateChoiceDraft(draft: ChoiceDraft, language: Language): ChoiceErrors {
   const errors: ChoiceErrors = {};
-  if (!draft.nameEn.trim()) errors.nameEn = 'Enter the English name. / 请输入英文名称。';
-  if (!draft.nameZh.trim()) errors.nameZh = 'Enter the Chinese name. / 请输入中文名称。';
+  if (![draft.nameEn, draft.nameZh, draft.nameMs].some(name => name.trim())) errors.nameEn = tr(language, 'Enter a name in at least one language.', '请至少填写一种语言的名称。', 'Masukkan nama dalam sekurang-kurangnya satu bahasa.');
 
   if (!/^-?(?:\d+|\d*\.\d{1,2})$/.test(draft.price.trim())) {
-    errors.price = 'Use a valid RM amount with up to 2 decimals. / 请输入最多两位小数的金额。';
+    errors.price = tr(language, "Use a valid RM amount with up to 2 decimals.", "请输入最多两位小数的金额。", "Masukkan amaun RM yang sah dengan sehingga 2 tempat perpuluhan.");
   } else {
     try {
       fromRinggit(draft.price);
     } catch {
-      errors.price = 'Enter a valid price adjustment. / 请输入有效的价格差额。';
+      errors.price = tr(language, "Enter a valid price adjustment.", "请输入有效的价格差额。", "Masukkan pelarasan harga yang sah.");
     }
   }
   return errors;
@@ -108,6 +113,7 @@ function draftToChoice(
       ...existing?.names,
       en: draft.nameEn.trim(),
       zh: draft.nameZh.trim(),
+      ms: draft.nameMs.trim(),
     },
     priceDeltaSen: fromRinggit(draft.price),
     enabled: existing?.enabled ?? true,
@@ -121,11 +127,8 @@ function formatChoicePrice(priceDeltaSen: number): string {
   return `${sign}RM ${senToDecimalString(Math.abs(priceDeltaSen))}`;
 }
 
-function displayNames(names: OptionGroup['names'] | OptionChoice['names']): string {
-  const en = names.en?.trim();
-  const zh = names.zh?.trim();
-  if (en && zh) return `${en} / ${zh}`;
-  return en || zh || 'Unnamed / 未命名';
+function displayNames(names: OptionGroup['names'] | OptionChoice['names'], language: Language): string {
+  return localized(names, language) || tr(language, 'Unnamed', '未命名', 'Tanpa nama');
 }
 
 function nextSortOrder(groups: OptionGroup[]): number {
@@ -151,6 +154,7 @@ function ResponsiveDialog({
   children,
   footer,
 }: ResponsiveDialogProps) {
+  const { language } = useStore();
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -236,7 +240,7 @@ function ResponsiveDialog({
             <button
               type="button"
               onClick={onBack}
-              aria-label="Back / 返回"
+              aria-label={tr(language, "Back", "返回", "Kembali")}
               className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl border border-gray-200 text-gray-700 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emphasis dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:focus-visible:ring-primary"
             >
               <ArrowLeft aria-hidden="true" className="h-5 w-5" />
@@ -253,7 +257,7 @@ function ResponsiveDialog({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close editor / 关闭编辑器"
+            aria-label={tr(language, "Close editor", "关闭编辑器", "Tutup editor")}
             className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-gray-600 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emphasis dark:text-zinc-300 dark:hover:bg-zinc-800 dark:focus-visible:ring-primary"
           >
             <X aria-hidden="true" className="h-5 w-5" />
@@ -280,58 +284,21 @@ interface ChoiceFieldsProps {
 }
 
 function ChoiceFields({ draft, errors, nameEnRef, onChange }: ChoiceFieldsProps) {
+  const { language } = useStore();
   const nameEnId = useId();
   const nameZhId = useId();
   const priceId = useId();
 
   return (
     <div className="space-y-5">
-      <div>
-        <label htmlFor={nameEnId} className="mb-2 block text-sm font-bold text-gray-800 dark:text-zinc-200">
-          Name (EN) / 英文名称 <span aria-hidden="true" className="text-red-600">*</span>
-        </label>
-        <input
-          ref={nameEnRef}
-          id={nameEnId}
-          type="text"
-          autoComplete="off"
-          value={draft.nameEn}
-          onChange={(event) => onChange({ ...draft, nameEn: event.target.value })}
-          aria-invalid={Boolean(errors.nameEn)}
-          aria-describedby={errors.nameEn ? `${nameEnId}-error` : undefined}
-          className={inputClassName}
-        />
-        {errors.nameEn && (
-          <p id={`${nameEnId}-error`} role="alert" className="mt-2 text-sm font-semibold text-red-700 dark:text-red-300">
-            {errors.nameEn}
-          </p>
-        )}
-      </div>
-
-      <div>
-        <label htmlFor={nameZhId} className="mb-2 block text-sm font-bold text-gray-800 dark:text-zinc-200">
-          Name (ZH) / 中文名称 <span aria-hidden="true" className="text-red-600">*</span>
-        </label>
-        <input
-          id={nameZhId}
-          type="text"
-          autoComplete="off"
-          value={draft.nameZh}
-          onChange={(event) => onChange({ ...draft, nameZh: event.target.value })}
-          aria-invalid={Boolean(errors.nameZh)}
-          aria-describedby={errors.nameZh ? `${nameZhId}-error` : undefined}
-          className={inputClassName}
-        />
-        {errors.nameZh && (
-          <p id={`${nameZhId}-error`} role="alert" className="mt-2 text-sm font-semibold text-red-700 dark:text-red-300">
-            {errors.nameZh}
-          </p>
-        )}
-      </div>
+      <LocalizedNameEditor language={language} label={tr(language, 'Option name', '选项名称', 'Nama pilihan')}
+        value={{ en: draft.nameEn, zh: draft.nameZh, ms: draft.nameMs }}
+        onChange={names => onChange({ ...draft, nameEn: names.en ?? '', nameZh: names.zh ?? '', nameMs: names.ms ?? '' })}
+        error={errors.nameEn} inputRef={nameEnRef} />
 
       <div>
         <label htmlFor={priceId} className="mb-2 block text-sm font-bold text-gray-800 dark:text-zinc-200">
-          Price adjustment (RM) / 价格差额
+          {tr(language, "Price adjustment (RM)", "价格差额 (RM)", "Pelarasan harga (RM)")}
         </label>
         <input
           id={priceId}
@@ -345,7 +312,7 @@ function ChoiceFields({ draft, errors, nameEnRef, onChange }: ChoiceFieldsProps)
           className={`${inputClassName} tabular-nums`}
         />
         <p id={`${priceId}-help`} className="mt-2 text-sm leading-5 text-gray-600 dark:text-zinc-300">
-          Use 0 for no change; a negative value lowers the price. / 不加价填 0，负数代表减价。
+          {tr(language, "Use 0 for no change; a negative value lowers the price.", "不加价填 0，负数代表减价。", "Masukkan 0 jika tiada perubahan; nilai negatif mengurangkan harga.")}
         </p>
         {errors.price && (
           <p id={`${priceId}-error`} role="alert" className="mt-2 text-sm font-semibold text-red-700 dark:text-red-300">
@@ -374,14 +341,15 @@ function SpecialChoiceDialog({
   onDelete,
   nextChoiceSortOrder,
 }: SpecialChoiceDialogProps) {
+  const { language } = useStore();
   const [draft, setDraft] = useState(() => choiceToDraft(choice));
   const [errors, setErrors] = useState<ChoiceErrors>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   const nameEnRef = useRef<HTMLInputElement>(null);
-  const sectionLabel = section === 'size' ? 'size / 大小份' : 'add-on / 加料';
+  const sectionLabel = section === 'size' ? tr(language, "size", "份量", "saiz") : tr(language, "add-on", "加料", "tambahan");
 
   const handleDone = () => {
-    const nextErrors = validateChoiceDraft(draft);
+    const nextErrors = validateChoiceDraft(draft, language);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       nameEnRef.current?.focus();
@@ -392,8 +360,8 @@ function SpecialChoiceDialog({
 
   return (
     <ResponsiveDialog
-      title={`${choice ? 'Edit' : 'Add'} ${sectionLabel}`}
-      description="Use full-width fields so both language names stay readable. / 使用大输入框完整填写双语名称。"
+      title={`${choice ? tr(language, 'Edit', '编辑', 'Sunting') : tr(language, 'Add', '新增', 'Tambah')} ${sectionLabel}`}
+      description={tr(language, "Enter a name and price. Translations are optional.", "填写名称和价格，其他语言可选。", "Masukkan nama dan harga. Terjemahan adalah pilihan.")}
       onClose={onClose}
       initialFocusRef={nameEnRef}
       footer={(
@@ -406,7 +374,7 @@ function SpecialChoiceDialog({
                 className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-300 px-4 py-2 font-bold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40 sm:w-auto"
               >
                 <Trash2 aria-hidden="true" className="h-4 w-4" />
-                Delete / 删除
+                {tr(language, "Delete", "删除", "Padam")}
               </button>
             )}
           </div>
@@ -416,14 +384,14 @@ function SpecialChoiceDialog({
               onClick={onClose}
               className="min-h-11 rounded-xl border border-gray-300 px-4 py-2 font-bold text-gray-800 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emphasis dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800 dark:focus-visible:ring-primary"
             >
-              Cancel / 取消
+              {tr(language, "Cancel", "取消", "Batal")}
             </button>
             <button
               type="button"
               onClick={handleDone}
               className="min-h-11 rounded-xl bg-primary px-4 py-2 font-bold text-on-primary transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emphasis focus-visible:ring-offset-2 dark:focus-visible:ring-primary dark:focus-visible:ring-offset-zinc-900"
             >
-              Done / 完成
+              {tr(language, "Done", "完成", "Selesai")}
             </button>
           </div>
         </div>
@@ -433,9 +401,9 @@ function SpecialChoiceDialog({
 
       {confirmDelete && onDelete && (
         <div role="alert" className="mt-6 rounded-2xl border border-red-300 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/40">
-          <p className="font-bold text-red-900 dark:text-red-100">Delete this option? / 删除这个选项？</p>
+          <p className="font-bold text-red-900 dark:text-red-100">{tr(language, "Delete this option?", "删除这个选项？", "Padam pilihan ini?")}</p>
           <p className="mt-1 text-sm leading-5 text-red-800 dark:text-red-200">
-            It will be removed from this menu item draft. / 它会从这个商品草稿中移除。
+            {tr(language, "It will be removed from this item draft.", "它会从这个商品草稿中移除。", "Pilihan akan dipadam daripada draf item ini.")}
           </p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <button
@@ -443,14 +411,14 @@ function SpecialChoiceDialog({
               onClick={() => setConfirmDelete(false)}
               className="min-h-11 rounded-xl border border-red-300 bg-white px-3 py-2 font-bold text-red-800 dark:border-red-800 dark:bg-zinc-900 dark:text-red-200"
             >
-              Keep / 保留
+              {tr(language, "Keep", "保留", "Kekalkan")}
             </button>
             <button
               type="button"
               onClick={onDelete}
               className="min-h-11 rounded-xl bg-red-700 px-3 py-2 font-bold text-white hover:bg-red-800"
             >
-              Delete / 删除
+              {tr(language, "Delete", "删除", "Padam")}
             </button>
           </div>
         </div>
@@ -474,6 +442,7 @@ function OptionGroupDialog({
   onDone,
   onDelete,
 }: OptionGroupDialogProps) {
+  const { language } = useStore();
   const [draft, setDraft] = useState<OptionGroup>(() => group
     ? cloneGroup(group)
     : {
@@ -524,7 +493,7 @@ function OptionGroupDialog({
   };
 
   const handleChoiceDone = () => {
-    const nextErrors = validateChoiceDraft(choiceDraft);
+    const nextErrors = validateChoiceDraft(choiceDraft, language);
     setChoiceErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       choiceNameRef.current?.focus();
@@ -575,15 +544,14 @@ function OptionGroupDialog({
   const validateGroup = (): GroupErrors => {
     const errors: GroupErrors = {};
     const enabledChoiceCount = draft.choices.filter((choice) => choice.enabled).length;
-    if (!draft.names.en?.trim()) errors.nameEn = 'Enter the English group name. / 请输入英文组名。';
-    if (!draft.names.zh?.trim()) errors.nameZh = 'Enter the Chinese group name. / 请输入中文组名。';
-    if (draft.minSelect < 0) errors.minSelect = 'Minimum cannot be below 0. / 最少数量不能小于 0。';
-    if (draft.required && draft.minSelect < 1) errors.minSelect = 'A required group must select at least 1. / 必选组至少要选 1 项。';
-    if (draft.maxSelect < 1) errors.maxSelect = 'Maximum must be at least 1. / 最多数量至少为 1。';
-    if (draft.minSelect > draft.maxSelect) errors.maxSelect = 'Maximum must be at least the minimum. / 最多数量不能小于最少数量。';
-    if (enabledChoiceCount === 0) errors.choices = 'Add at least one option. / 请至少新增一个选项。';
+    if (!localized(draft.names, language)) errors.nameEn = tr(language, 'Enter a group name in at least one language.', '请至少填写一种语言的组名。', 'Masukkan nama kumpulan dalam sekurang-kurangnya satu bahasa.');
+    if (draft.minSelect < 0) errors.minSelect = tr(language, "Minimum cannot be below 0.", "最少数量不能小于 0。", "Minimum tidak boleh kurang daripada 0.");
+    if (draft.required && draft.minSelect < 1) errors.minSelect = tr(language, "A required group must select at least 1.", "必选组至少要选 1 项。", "Kumpulan wajib mesti memilih sekurang-kurangnya 1.");
+    if (draft.maxSelect < 1) errors.maxSelect = tr(language, "Maximum must be at least 1.", "最多数量至少为 1。", "Maksimum mestilah sekurang-kurangnya 1.");
+    if (draft.minSelect > draft.maxSelect) errors.maxSelect = tr(language, "Maximum must be at least the minimum.", "最多数量不能小于最少数量。", "Maksimum tidak boleh kurang daripada minimum.");
+    if (enabledChoiceCount === 0) errors.choices = tr(language, "Add at least one option.", "请至少新增一个选项。", "Tambah sekurang-kurangnya satu pilihan.");
     else if (draft.maxSelect > enabledChoiceCount) {
-      errors.maxSelect = `Maximum cannot exceed ${enabledChoiceCount} enabled option${enabledChoiceCount === 1 ? '' : 's'}. / 最多数量不能超过可用选项数。`;
+      errors.maxSelect = tr(language, `Maximum cannot exceed ${enabledChoiceCount} enabled options.`, `最多数量不能超过 ${enabledChoiceCount} 个可用选项。`, `Maksimum tidak boleh melebihi ${enabledChoiceCount} pilihan aktif.`);
     }
     return errors;
   };
@@ -601,6 +569,7 @@ function OptionGroupDialog({
         ...draft.names,
         en: draft.names.en?.trim(),
         zh: draft.names.zh?.trim(),
+        ms: draft.names.ms?.trim(),
       },
     });
   };
@@ -615,7 +584,7 @@ function OptionGroupDialog({
             className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-300 px-4 py-2 font-bold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40 sm:w-auto"
           >
             <Trash2 aria-hidden="true" className="h-4 w-4" />
-            Delete group / 删除组
+            {tr(language, "Delete group", "删除组", "Padam kumpulan")}
           </button>
         )}
       </div>
@@ -625,14 +594,14 @@ function OptionGroupDialog({
           onClick={onClose}
           className="min-h-11 rounded-xl border border-gray-300 px-4 py-2 font-bold text-gray-800 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emphasis dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800 dark:focus-visible:ring-primary"
         >
-          Cancel / 取消
+          {tr(language, "Cancel", "取消", "Batal")}
         </button>
         <button
           type="button"
           onClick={handleGroupDone}
           className="min-h-11 rounded-xl bg-primary px-4 py-2 font-bold text-on-primary transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emphasis focus-visible:ring-offset-2 dark:focus-visible:ring-primary dark:focus-visible:ring-offset-zinc-900"
         >
-          Done / 完成
+          {tr(language, "Done", "完成", "Selesai")}
         </button>
       </div>
     </div>
@@ -648,7 +617,7 @@ function OptionGroupDialog({
             className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-300 px-4 py-2 font-bold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40 sm:w-auto"
           >
             <Trash2 aria-hidden="true" className="h-4 w-4" />
-            Delete / 删除
+            {tr(language, "Delete", "删除", "Padam")}
           </button>
         )}
       </div>
@@ -658,14 +627,14 @@ function OptionGroupDialog({
           onClick={closeChoiceEditor}
           className="min-h-11 rounded-xl border border-gray-300 px-4 py-2 font-bold text-gray-800 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emphasis dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800 dark:focus-visible:ring-primary"
         >
-          Cancel / 取消
+          {tr(language, "Cancel", "取消", "Batal")}
         </button>
         <button
           type="button"
           onClick={handleChoiceDone}
           className="min-h-11 rounded-xl bg-primary px-4 py-2 font-bold text-on-primary transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emphasis focus-visible:ring-offset-2 dark:focus-visible:ring-primary dark:focus-visible:ring-offset-zinc-900"
         >
-          Done / 完成
+          {tr(language, "Done", "完成", "Selesai")}
         </button>
       </div>
     </div>
@@ -674,11 +643,11 @@ function OptionGroupDialog({
   return (
     <ResponsiveDialog
       title={screen === 'group'
-        ? `${group ? 'Edit' : 'Add'} option group / ${group ? '编辑' : '新增'}种类选项`
-        : `${editingChoice ? 'Edit' : 'Add'} option / ${editingChoice ? '编辑' : '新增'}可选内容`}
+        ? (group ? tr(language, 'Edit option group', '编辑种类选项', 'Sunting kumpulan pilihan') : tr(language, 'Add option group', '新增种类选项', 'Tambah kumpulan pilihan'))
+        : (editingChoice ? tr(language, 'Edit option', '编辑选项', 'Sunting pilihan') : tr(language, 'Add option', '新增选项', 'Tambah pilihan'))}
       description={screen === 'group'
-        ? 'Create choices such as rice type, protein or cooking style. / 可建立饭类、肉类或烹调方式等选择。'
-        : `Editing inside ${displayNames(draft.names)}. / 正在编辑 ${displayNames(draft.names)}。`}
+        ? tr(language, "Create choices such as rice type, protein or cooking style.", "可建立饭类、肉类或烹调方式等选择。", "Cipta pilihan seperti jenis nasi, protein atau cara masakan.")
+        : tr(language, `Editing ${displayNames(draft.names, language)}`, `正在编辑 ${displayNames(draft.names, language)}`, `Menyunting ${displayNames(draft.names, language)}`)}
       onClose={onClose}
       onBack={screen === 'choice' ? closeChoiceEditor : undefined}
       initialFocusRef={screen === 'group' ? groupNameRef : choiceNameRef}
@@ -686,60 +655,15 @@ function OptionGroupDialog({
     >
       {screen === 'group' ? (
         <div className="space-y-6">
-          <div>
-            <label htmlFor={groupNameEnId} className="mb-2 block text-sm font-bold text-gray-800 dark:text-zinc-200">
-              Group name (EN) / 英文组名 <span aria-hidden="true" className="text-red-600">*</span>
-            </label>
-            <input
-              ref={groupNameRef}
-              id={groupNameEnId}
-              type="text"
-              autoComplete="off"
-              value={draft.names.en ?? ''}
-              onChange={(event) => setDraft((current) => ({
-                ...current,
-                names: { ...current.names, en: event.target.value },
-              }))}
-              aria-invalid={Boolean(groupErrors.nameEn)}
-              aria-describedby={groupErrors.nameEn ? `${groupNameEnId}-error` : undefined}
-              className={inputClassName}
-            />
-            {groupErrors.nameEn && (
-              <p id={`${groupNameEnId}-error`} role="alert" className="mt-2 text-sm font-semibold text-red-700 dark:text-red-300">
-                {groupErrors.nameEn}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label htmlFor={groupNameZhId} className="mb-2 block text-sm font-bold text-gray-800 dark:text-zinc-200">
-              Group name (ZH) / 中文组名 <span aria-hidden="true" className="text-red-600">*</span>
-            </label>
-            <input
-              id={groupNameZhId}
-              type="text"
-              autoComplete="off"
-              value={draft.names.zh ?? ''}
-              onChange={(event) => setDraft((current) => ({
-                ...current,
-                names: { ...current.names, zh: event.target.value },
-              }))}
-              aria-invalid={Boolean(groupErrors.nameZh)}
-              aria-describedby={groupErrors.nameZh ? `${groupNameZhId}-error` : undefined}
-              className={inputClassName}
-            />
-            {groupErrors.nameZh && (
-              <p id={`${groupNameZhId}-error`} role="alert" className="mt-2 text-sm font-semibold text-red-700 dark:text-red-300">
-                {groupErrors.nameZh}
-              </p>
-            )}
-          </div>
+          <LocalizedNameEditor language={language} label={tr(language, 'Group name', '选项组名称', 'Nama kumpulan')}
+            value={draft.names} onChange={names => setDraft(current => ({ ...current, names }))}
+            error={groupErrors.nameEn} inputRef={groupNameRef} />
 
           <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-950">
             <span>
-              <span className="block font-bold text-gray-900 dark:text-white">Required / 必选</span>
+              <span className="block font-bold text-gray-900 dark:text-white">{tr(language, "Required", "必选", "Wajib")}</span>
               <span className="mt-1 block text-sm leading-5 text-gray-600 dark:text-zinc-300">
-                Customers must complete this group. / 顾客必须完成这一组选项。
+                {tr(language, "Customers must complete this group.", "顾客必须完成这一组选项。", "Pelanggan mesti melengkapkan kumpulan ini.")}
               </span>
             </span>
             <input
@@ -752,7 +676,7 @@ function OptionGroupDialog({
 
           <fieldset>
             <legend className="mb-3 text-sm font-bold text-gray-800 dark:text-zinc-200">
-              Selection rule / 选择方式
+              {tr(language, "Selection rule", "选择方式", "Peraturan pilihan")}
             </legend>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className={`flex min-h-12 cursor-pointer items-start gap-3 rounded-2xl border-2 p-4 ${
@@ -768,8 +692,8 @@ function OptionGroupDialog({
                   className="mt-0.5 h-5 w-5 accent-primary"
                 />
                 <span>
-                  <span className="block font-bold text-gray-900 dark:text-white">Choose one / 单选</span>
-                  <span className="mt-1 block text-sm text-gray-600 dark:text-zinc-300">Example: chicken or beef / 例如鸡肉或牛肉</span>
+                  <span className="block font-bold text-gray-900 dark:text-white">{tr(language, "Choose one", "单选", "Pilih satu")}</span>
+                  <span className="mt-1 block text-sm text-gray-600 dark:text-zinc-300">{tr(language, "Example: chicken or beef", "例如鸡肉或牛肉", "Contoh: ayam atau daging lembu")}</span>
                 </span>
               </label>
               <label className={`flex min-h-12 cursor-pointer items-start gap-3 rounded-2xl border-2 p-4 ${
@@ -785,8 +709,8 @@ function OptionGroupDialog({
                   className="mt-0.5 h-5 w-5 accent-primary"
                 />
                 <span>
-                  <span className="block font-bold text-gray-900 dark:text-white">Choose multiple / 多选</span>
-                  <span className="mt-1 block text-sm text-gray-600 dark:text-zinc-300">Example: mixed noodles / 例如混合面类</span>
+                  <span className="block font-bold text-gray-900 dark:text-white">{tr(language, "Choose multiple", "多选", "Pilih beberapa")}</span>
+                  <span className="mt-1 block text-sm text-gray-600 dark:text-zinc-300">{tr(language, "Example: mixed noodles", "例如混合面类", "Contoh: mi campur")}</span>
                 </span>
               </label>
             </div>
@@ -796,7 +720,7 @@ function OptionGroupDialog({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor={minSelectId} className="mb-2 block text-sm font-bold text-gray-800 dark:text-zinc-200">
-                  Minimum / 最少选择
+                  {tr(language, "Minimum", "最少选择", "Minimum")}
                 </label>
                 <input
                   id={minSelectId}
@@ -821,7 +745,7 @@ function OptionGroupDialog({
               </div>
               <div>
                 <label htmlFor={maxSelectId} className="mb-2 block text-sm font-bold text-gray-800 dark:text-zinc-200">
-                  Maximum / 最多选择
+                  {tr(language, "Maximum", "最多选择", "Maksimum")}
                 </label>
                 <input
                   id={maxSelectId}
@@ -851,10 +775,10 @@ function OptionGroupDialog({
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h4 id={`${groupNameEnId}-choices`} className="font-extrabold text-gray-950 dark:text-white">
-                  Options / 可选内容
+                  {tr(language, "Options", "可选内容", "Pilihan")}
                 </h4>
                 <p className="mt-1 text-sm text-gray-600 dark:text-zinc-300">
-                  Each option can have its own price. / 每个选项都可以有不同价格。
+                  {tr(language, "Each option can have its own price.", "每个选项都可以有不同价格。", "Setiap pilihan boleh mempunyai harga tersendiri.")}
                 </p>
               </div>
               <button
@@ -863,7 +787,7 @@ function OptionGroupDialog({
                 className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 font-bold text-on-primary transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emphasis sm:w-auto"
               >
                 <Plus aria-hidden="true" className="h-4 w-4" />
-                Add option / 新增选项
+                {tr(language, "Add option", "新增选项", "Tambah pilihan")}
               </button>
             </div>
 
@@ -883,21 +807,21 @@ function OptionGroupDialog({
                 >
                   <span className="min-w-0">
                     <span className="block break-words font-bold text-gray-900 dark:text-white">
-                      {displayNames(choice.names)}
+                      {displayNames(choice.names, language)}
                     </span>
                     <span className="mt-1 block text-sm tabular-nums text-gray-600 dark:text-zinc-300">
                       {formatChoicePrice(choice.priceDeltaSen)}
                     </span>
                   </span>
                   <span className="inline-flex items-center gap-1 text-sm font-bold text-emphasis dark:text-primary">
-                    Edit / 编辑
+                    {tr(language, "Edit", "编辑", "Sunting")}
                     <ChevronRight aria-hidden="true" className="h-4 w-4" />
                   </span>
                 </button>
               ))}
               {draft.choices.length === 0 && (
                 <p className="rounded-xl bg-gray-50 px-3 py-4 text-center text-sm text-gray-600 dark:bg-zinc-950 dark:text-zinc-300">
-                  No options yet. / 还没有可选内容。
+                  {tr(language, "No options yet.", "还没有可选内容。", "Belum ada pilihan.")}
                 </p>
               )}
             </div>
@@ -905,9 +829,9 @@ function OptionGroupDialog({
 
           {confirmDeleteGroup && onDelete && (
             <div role="alert" className="rounded-2xl border border-red-300 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/40">
-              <p className="font-bold text-red-900 dark:text-red-100">Delete this group? / 删除这个种类组？</p>
+              <p className="font-bold text-red-900 dark:text-red-100">{tr(language, "Delete this group?", "删除这个种类组？", "Padam kumpulan ini?")}</p>
               <p className="mt-1 text-sm leading-5 text-red-800 dark:text-red-200">
-                The group and all of its options will be removed from this item draft. / 此组和里面的选项会从商品草稿中移除。
+                {tr(language, "The group and its options will be removed from this item draft.", "此组和里面的选项会从商品草稿中移除。", "Kumpulan dan pilihannya akan dipadam daripada draf item ini.")}
               </p>
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <button
@@ -915,14 +839,14 @@ function OptionGroupDialog({
                   onClick={() => setConfirmDeleteGroup(false)}
                   className="min-h-11 rounded-xl border border-red-300 bg-white px-3 py-2 font-bold text-red-800 dark:border-red-800 dark:bg-zinc-900 dark:text-red-200"
                 >
-                  Keep / 保留
+                  {tr(language, "Keep", "保留", "Kekalkan")}
                 </button>
                 <button
                   type="button"
                   onClick={onDelete}
                   className="min-h-11 rounded-xl bg-red-700 px-3 py-2 font-bold text-white hover:bg-red-800"
                 >
-                  Delete / 删除
+                  {tr(language, "Delete", "删除", "Padam")}
                 </button>
               </div>
             </div>
@@ -939,21 +863,21 @@ function OptionGroupDialog({
 
           {confirmDeleteChoice && editingChoice && (
             <div role="alert" className="mt-6 rounded-2xl border border-red-300 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/40">
-              <p className="font-bold text-red-900 dark:text-red-100">Delete this option? / 删除这个选项？</p>
+              <p className="font-bold text-red-900 dark:text-red-100">{tr(language, "Delete this option?", "删除这个选项？", "Padam pilihan ini?")}</p>
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => setConfirmDeleteChoice(false)}
                   className="min-h-11 rounded-xl border border-red-300 bg-white px-3 py-2 font-bold text-red-800 dark:border-red-800 dark:bg-zinc-900 dark:text-red-200"
                 >
-                  Keep / 保留
+                  {tr(language, "Keep", "保留", "Kekalkan")}
                 </button>
                 <button
                   type="button"
                   onClick={handleChoiceDelete}
                   className="min-h-11 rounded-xl bg-red-700 px-3 py-2 font-bold text-white hover:bg-red-800"
                 >
-                  Delete / 删除
+                  {tr(language, "Delete", "删除", "Padam")}
                 </button>
               </div>
             </div>
@@ -975,7 +899,7 @@ interface SummaryCardProps {
 function SummaryCard({ title, description, addLabel, onAdd, children }: SummaryCardProps) {
   return (
     <section className="min-w-0 rounded-2xl border border-gray-200 bg-gray-50/70 p-4 dark:border-zinc-700 dark:bg-zinc-950/60">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between xl:flex-col 2xl:flex-row">
+      <div className="flex flex-col gap-3">
         <div className="min-w-0">
           <h4 className="break-words font-extrabold text-gray-950 dark:text-white">{title}</h4>
           <p className="mt-1 text-sm leading-5 text-gray-600 dark:text-zinc-300">{description}</p>
@@ -983,7 +907,7 @@ function SummaryCard({ title, description, addLabel, onAdd, children }: SummaryC
         <button
           type="button"
           onClick={onAdd}
-          className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-bold text-on-primary transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emphasis xl:w-full 2xl:w-auto"
+          className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-bold text-on-primary transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emphasis"
         >
           <Plus aria-hidden="true" className="h-4 w-4" />
           {addLabel}
@@ -1000,6 +924,7 @@ interface ChoiceSummaryButtonProps {
 }
 
 function ChoiceSummaryButton({ choice, onClick }: ChoiceSummaryButtonProps) {
+  const { language } = useStore();
   return (
     <button
       type="button"
@@ -1008,7 +933,7 @@ function ChoiceSummaryButton({ choice, onClick }: ChoiceSummaryButtonProps) {
     >
       <span className="min-w-0">
         <span className="block break-words font-bold text-gray-900 dark:text-white">
-          {displayNames(choice.names)}
+          {displayNames(choice.names, language)}
         </span>
         <span className="mt-1 block text-sm tabular-nums text-gray-600 dark:text-zinc-300">
           {formatChoicePrice(choice.priceDeltaSen)}
@@ -1016,7 +941,7 @@ function ChoiceSummaryButton({ choice, onClick }: ChoiceSummaryButtonProps) {
       </span>
       <span className="inline-flex items-center gap-1 text-sm font-bold text-emphasis dark:text-primary">
         <Pencil aria-hidden="true" className="h-4 w-4" />
-        <span className="hidden 2xl:inline">Edit / 编辑</span>
+        <span className="hidden 2xl:inline">{tr(language, "Edit", "编辑", "Sunting")}</span>
       </span>
     </button>
   );
@@ -1036,6 +961,7 @@ export default function MenuOptionManager({
   groups,
   onChange,
 }: MenuOptionManagerProps) {
+  const { language } = useStore();
   const sizeGroupId = getLegacySizeGroupId(itemId);
   const addOnGroupId = getLegacyAddOnGroupId(itemId);
   const sizeGroup = groups.find((group) => group.id === sizeGroupId);
@@ -1075,8 +1001,8 @@ export default function MenuOptionManager({
   const createSpecialGroup = (section: SpecialSection): OptionGroup => ({
     id: specialGroupIdFor(section),
     names: section === 'size'
-      ? { en: 'Size', zh: '大小份' }
-      : { en: 'Add-ons', zh: '加料' },
+      ? { en: 'Size', zh: '份量', ms: 'Saiz' }
+      : { en: 'Add-ons', zh: '加料', ms: 'Tambahan' },
     required: section === 'size',
     minSelect: section === 'size' ? 1 : 0,
     maxSelect: 1,
@@ -1119,17 +1045,17 @@ export default function MenuOptionManager({
   return (
     <div>
       <div className="mb-4">
-        <h4 className="text-base font-extrabold text-gray-950 dark:text-white">Item choices / 商品选项</h4>
+        <h4 className="text-base font-extrabold text-gray-950 dark:text-white">{tr(language, "Item choices", "商品选项", "Pilihan item")}</h4>
         <p className="mt-1 text-sm leading-5 text-gray-600 dark:text-zinc-300">
-          Tap a row to edit the full name and price in a larger box. “Done” changes this draft only; use Save settings to keep it. / 点选一行即可在大弹窗编辑完整名称与价格；“完成”只修改草稿，最后仍要保存设置。
+          {tr(language, "Tap to edit an option. Choose Done, then Save settings to keep your changes.", "点选选项进行编辑，完成后记得保存设置。", "Tekan untuk menyunting pilihan. Pilih Selesai, kemudian Simpan tetapan.")}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4">
         <SummaryCard
-          title="Sizes / 大小份"
-          description="Serving sizes for this item. / 此商品的份量大小。"
-          addLabel="Add size / 新增大小"
+          title={tr(language, "Sizes", "份量", "Saiz")}
+          description={tr(language, "Serving sizes for this item.", "此商品的份量大小。", "Saiz hidangan untuk item ini.")}
+          addLabel={tr(language, "Add size", "新增份量", "Tambah saiz")}
           onAdd={() => setSpecialEditor({ section: 'size' })}
         >
           {sizeGroup?.choices.map((choice) => (
@@ -1140,13 +1066,13 @@ export default function MenuOptionManager({
               />
             </div>
           ))}
-          {!sizeGroup?.choices.length && <EmptySummary text="No sizes. / 还没有大小份。" />}
+          {!sizeGroup?.choices.length && <EmptySummary text={tr(language, "No sizes.", "还没有份量选项。", "Belum ada saiz.")} />}
         </SummaryCard>
 
         <SummaryCard
-          title="Option Groups / 种类选项"
-          description="Add rice, protein, noodle or other groups. / 可加饭类、肉类、面类等多个组。"
-          addLabel="Add group / 新增种类"
+          title={tr(language, "Option groups", "种类选项", "Kumpulan pilihan")}
+          description={tr(language, "Add rice, protein, noodle or other groups.", "可加饭类、肉类、面类等多个组。", "Tambah kumpulan nasi, protein, mi atau yang lain.")}
+          addLabel={tr(language, "Add group", "新增种类", "Tambah kumpulan")}
           onAdd={() => setGroupEditor('new')}
         >
           {customGroups.map((group) => (
@@ -1158,29 +1084,29 @@ export default function MenuOptionManager({
             >
               <span className="min-w-0">
                 <span className="block break-words font-bold text-gray-900 dark:text-white">
-                  {displayNames(group.names)}
+                  {displayNames(group.names, language)}
                 </span>
                 <span className="mt-1 block break-words text-sm leading-5 text-gray-600 dark:text-zinc-300">
-                  {group.required ? 'Required / 必选' : 'Optional / 可选'} · {group.maxSelect === 1
-                    ? 'Choose 1 / 单选'
-                    : `${group.minSelect}–${group.maxSelect} selections / 可选 ${group.minSelect}–${group.maxSelect} 项`} · {group.choices.length} options / 选项
+                  {group.required ? tr(language, "Required", "必选", "Wajib") : tr(language, "Optional", "可选", "Pilihan")} · {group.maxSelect === 1
+                    ? tr(language, "Choose 1", "单选", "Pilih 1")
+                    : tr(language, `Choose ${group.minSelect}–${group.maxSelect}`, `可选 ${group.minSelect}–${group.maxSelect} 项`, `Pilih ${group.minSelect}–${group.maxSelect}`)} · {tr(language, `${group.choices.length} options`, `${group.choices.length} 个选项`, `${group.choices.length} pilihan`)}
                 </span>
               </span>
               <span className="inline-flex items-center gap-1 text-sm font-bold text-emphasis dark:text-primary">
                 <Pencil aria-hidden="true" className="h-4 w-4" />
-                <span className="hidden 2xl:inline">Edit / 编辑</span>
+                <span className="hidden 2xl:inline">{tr(language, "Edit", "编辑", "Sunting")}</span>
               </span>
             </button>
           ))}
           {customGroups.length === 0 && (
-            <EmptySummary text="No type groups yet. Add rice, protein or another choice. / 还没有种类组，可新增饭类、肉类等选择。" />
+            <EmptySummary text={tr(language, "No groups yet. Add rice, protein or another choice.", "还没有种类组，可新增饭类、肉类等选择。", "Belum ada kumpulan. Tambah pilihan nasi, protein atau yang lain.")} />
           )}
         </SummaryCard>
 
         <SummaryCard
-          title="Add-ons / 加料"
-          description="Optional extras with their own prices. / 可另外加价的附加项目。"
-          addLabel="Add add-on / 新增加料"
+          title={tr(language, "Add-ons", "加料", "Tambahan")}
+          description={tr(language, "Optional extras with their own prices.", "可另外加价的附加项目。", "Tambahan pilihan dengan harga tersendiri.")}
+          addLabel={tr(language, "Add add-on", "新增加料", "Tambah tambahan")}
           onAdd={() => setSpecialEditor({ section: 'addOn' })}
         >
           {addOnGroup?.choices.map((choice) => (
@@ -1191,7 +1117,7 @@ export default function MenuOptionManager({
               />
             </div>
           ))}
-          {!addOnGroup?.choices.length && <EmptySummary text="No add-ons. / 还没有加料。" />}
+          {!addOnGroup?.choices.length && <EmptySummary text={tr(language, "No add-ons.", "还没有加料。", "Belum ada tambahan.")} />}
         </SummaryCard>
       </div>
 
@@ -1227,7 +1153,7 @@ export default function MenuOptionManager({
       )}
 
       <span className="sr-only" aria-live="polite">
-        Editing options for {itemName}
+        {tr(language, `Editing options for ${itemName}`, `正在编辑 ${itemName} 的选项`, `Menyunting pilihan untuk ${itemName}`)}
       </span>
     </div>
   );

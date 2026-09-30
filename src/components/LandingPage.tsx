@@ -1,135 +1,238 @@
-import React from 'react';
-import {
-  ArrowRight,
-  ChefHat,
-  CloudOff,
-  MonitorSmartphone,
-  ShieldCheck,
-  UtensilsCrossed,
-} from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { ArrowDownToLine, ArrowRight, ChefHat, Check, ChevronRight, ClipboardList, CreditCard, FileArchive, FileSpreadsheet, HardDrive, Languages, MonitorSmartphone, PlayCircle, Settings2, ShieldCheck, Smartphone, Store, Volume2 } from 'lucide-react';
 import { APP_ICON_SRC } from '../brand';
 import { IS_PUBLIC_DEMO } from '../demo-mode';
+import { useStore } from '../store';
+import { tr } from '../i18n';
 import PublicDemoReset from './PublicDemoReset';
+import './LandingPage.css';
 
-interface Props {
-  onStart: () => void;
-  onAdmin: () => void;
-  onKitchen: () => void;
-}
+interface Props { onStart: () => void; onAdmin: () => void; onKitchen: () => void; }
+const asset = (name: string) => import.meta.env.BASE_URL + 'assets/' + name;
+const media = (name: string) => import.meta.env.BASE_URL + 'media/' + name;
+const APK_URL = import.meta.env.BASE_URL + 'downloads/CJ_POS_0.1.3_Test.apk';
 
-const heroSrc = `${import.meta.env.BASE_URL}assets/pos-hero-v2-black-yellow.png`;
-
+// A food-business landing page, using the existing React/CSS and Lucide stack.
+// Light cream is a deliberate brand choice. Real screenshots remain unaltered.
 export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
-  return (
-    <div className="min-h-dvh overflow-x-hidden bg-zinc-950 font-display text-white">
-      <header className="pt-safe border-b border-white/10 bg-zinc-950/90 backdrop-blur-xl">
-        <div className="mx-auto flex min-h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-3">
-            <img src={APP_ICON_SRC} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover shadow-lg shadow-black/30" />
-            <div className="min-w-0">
-              <p className="truncate text-base font-extrabold tracking-tight sm:text-lg">CJ F&amp;B POS</p>
-              <p className="text-xs font-semibold text-white/60">
-                {IS_PUBLIC_DEMO ? 'Public test build · 公开测试版' : 'Private build · 内部版本'}
-              </p>
-            </div>
-          </div>
+  const { language, changeLanguage } = useStore();
+  const t = (en: string, zh: string, ms: string) => tr(language, en, zh, ms);
+  const [activeStep, setActiveStep] = useState(0);
+  const [videoState, setVideoState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const steps = [
+    {
+      title: t('Register', '收银点单', 'Daftar pesanan'),
+      short: t('Build an order', '选商品、开订单', 'Bina pesanan'),
+      icon: Store, image: 'cj-pos-register-desktop.jpg',
+      heading: t('Take the order while you serve.', '边招呼客人，边把订单记好。', 'Ambil pesanan sambil melayan.'),
+      body: t('Choose items, adjust quantities and options, then choose dine-in or takeaway. Collect payment now or send the order to the kitchen and collect later.', '点选商品，调整数量和选项，再选择堂食或外带。可以现在收款，也可以先送厨房、稍后收款。', 'Pilih item, kuantiti dan pilihan, kemudian makan di sini atau bungkus. Terima bayaran sekarang atau hantar ke dapur dan kutip kemudian.'),
+      detail: t('Tax and takeaway fees are included in the amount shown before confirming.', '确认前显示的总额，已包含你设定的税费与打包费。', 'Jumlah sebelum pengesahan termasuk cukai dan caj bungkus yang ditetapkan.'),
+    },
+    {
+      title: t('Edit', '编辑菜单', 'Sunting menu'),
+      short: t('Make it your shop', '换成你自己的店', 'Jadikan kedai anda'),
+      icon: Settings2, image: 'cj-pos-edit.jpg',
+      heading: t('Your shop name. Your own menu.', '店名、菜品，换成你自己的。', 'Nama kedai dan menu anda sendiri.'),
+      body: t('Edit the shop name, prices, photos, serving sizes and add-ons. The same menu works for kuih, drinks, noodles and other food.', '修改店名、价格和照片，设置大小份、口味或加料。卖糕点、饮料、面食，都可以换成自己的菜单。', 'Ubah nama kedai, harga, foto, saiz hidangan dan tambahan. Gunakan menu yang sama untuk kuih, minuman, mi atau makanan lain.'),
+      detail: t('Use English, Chinese or Malay names. Missing translations fall back to a name you entered.', '名称支持英文、华语和马来文；没填的语言，会显示你已填写的名称。', 'Nama menyokong Inggeris, Cina dan Melayu. Terjemahan kosong menggunakan nama yang sudah diisi.'),
+    },
+    {
+      title: t('Customer View', '顾客模式', 'Paparan pelanggan'),
+      short: t('Hand over the phone', '交给顾客选餐', 'Serahkan telefon'),
+      icon: Smartphone, image: 'cj-pos-customer.jpg',
+      heading: t('Let them choose. Then take over.', '让顾客自己选，再交回给你。', 'Pelanggan pilih, anda sambung.'),
+      body: t('Hand this device to the customer. They choose items, review their order and submit it. The order summary asks them to return the phone to staff.', '把这台设备交给顾客。他可以选商品、检查订单，再提交。完成后，订单摘要会提示他把电话交还给店员。', 'Serahkan peranti ini kepada pelanggan. Mereka pilih item, semak dan hantar pesanan. Ringkasan meminta telefon dipulangkan kepada kakitangan.'),
+      detail: t('One shared device. This version does not sync a second customer phone.', '目前使用同一台设备，不会同步另一位顾客的电话。', 'Satu peranti dikongsi. Versi ini tidak menyegerakkan telefon pelanggan kedua.'),
+    },
+    {
+      title: t('Kitchen', '厨房备餐', 'Dapur'),
+      short: t('Prepare and complete', '备餐、标记出餐', 'Sedia dan siapkan'),
+      icon: ChefHat, image: 'cj-pos-kitchen.jpg',
+      heading: t('Keep preparation moving.', '看清每一单，按顺序准备。', 'Susun penyediaan setiap pesanan.'),
+      body: t('Both paid and unpaid orders appear in the kitchen. Read the order number and choices, prepare the food, and mark it ready.', '先付、后付的订单都会进入厨房。按订单号查看商品和选项，准备好后标记已出餐。', 'Pesanan berbayar dan belum berbayar muncul di dapur. Semak nombor dan pilihan, sediakan makanan, kemudian tandakan siap.'),
+      detail: t('Ready does not mean paid. Unpaid orders remain available in Payments.', '已出餐不代表已付款。未付款订单仍留在收款页。', 'Siap tidak bermaksud dibayar. Pesanan belum dibayar kekal dalam Bayaran.'),
+    },
+    {
+      title: t('Payments', '确认收款', 'Bayaran'),
+      short: t('Confirm money received', '确认实际到账', 'Sahkan wang diterima'),
+      icon: CreditCard, image: 'cj-pos-payments.jpg',
+      heading: t('A clear place for unpaid orders.', '还有哪些没收钱，一眼看清。', 'Lihat pesanan yang belum dibayar.'),
+      body: t('Open an unpaid order, choose Cash or QR, and confirm only after receiving the money. Orders already served stay visible until they are paid.', '打开未付款订单，选择现金或 QR，实际收到款后才确认。已经出餐但还没付钱的订单，也会继续显示。', 'Buka pesanan belum dibayar, pilih Tunai atau QR dan sahkan selepas wang diterima. Pesanan yang sudah siap kekal sehingga dibayar.'),
+      detail: t('QR displays your payment image. It does not check your bank balance or confirm transfers automatically.', 'QR 只是显示你的收款码，不会读取银行余额或自动确认转账。', 'QR memaparkan kod bayaran anda. Ia tidak membaca baki bank atau mengesahkan pindahan secara automatik.'),
+    },
+    {
+      title: t('History', '记录与报表', 'Sejarah'),
+      short: t('Review and export', '看记录、导出报表', 'Semak dan eksport'),
+      icon: ClipboardList, image: 'cj-pos-history.jpg',
+      heading: t('Finish the day with a clear record.', '收工前，把今天的记录留好。', 'Simpan rekod yang jelas setiap hari.'),
+      body: t('Review day, week, month or year. Export an Excel file with a summary, daily totals, orders and item details. Only confirmed, non-cancelled payments count as receipts.', '按日、周、月或年查看记录。导出 Excel，内含汇总、每日金额、订单和商品明细。营收只计算已确认收款且未取消的订单。', 'Semak hari, minggu, bulan atau tahun. Eksport Excel dengan ringkasan, jumlah harian, pesanan dan butiran item. Hanya bayaran disahkan yang tidak dibatalkan dikira.'),
+      detail: t('Reports follow the date payment was received, using Malaysia time.', '报表按实际收款日期统计，使用马来西亚时间。', 'Laporan mengikut tarikh bayaran diterima, menggunakan waktu Malaysia.'),
+    },
+  ];
+  const currentStep = steps[activeStep];
+  const openSelectedStep = () => {
+    if (activeStep === 1) onAdmin();
+    else if (activeStep === 2) onStart();
+    else if (activeStep === 3) onKitchen();
+    else window.location.hash = activeStep === 4 ? '#/cashier/active' : activeStep === 5 ? '#/cashier/history' : '#/cashier';
+  };
+  const faqs = [
+    [t('Is the app free?', '现在可以免费用吗？', 'Adakah aplikasi ini percuma?'), t('This 0.1.3 test version is free to try. The Android APK is a direct download and is not a Google Play release.', '0.1.3 测试版可以免费试用。Android APK 从这里直接下载，目前还未上架 Google Play。', 'Versi ujian 0.1.3 ini percuma untuk dicuba. APK Android dimuat turun terus dan belum diterbitkan di Google Play.')],
+    [t('Can two phones share the same orders?', '两台电话可以同时使用同一批订单吗？', 'Bolehkah dua telefon berkongsi pesanan?'), t('No. Each browser or installed app keeps its own records. For Customer View, pass the same device to the customer and take it back after the order.', '目前不可以。每个浏览器、每个已安装的 App 都各自保存资料。使用顾客模式时，把同一台设备交给顾客，点完单再拿回来。', 'Belum boleh. Setiap pelayar atau aplikasi menyimpan rekod sendiri. Untuk Paparan pelanggan, serahkan peranti yang sama dan ambil semula selepas pesanan.')],
+    [t('Can I combine the whole year?', '可以一次导出整年的记录吗？', 'Bolehkah saya eksport setahun sekali gus?'), t('Yes. Select Year in History to create one report from records still on that device. You do not need to merge daily Excel files by hand.', '可以。在记录页选「年」，就能把这台设备里仍保存的记录汇成一份报表，不必手动合并每天的 Excel。', 'Boleh. Pilih Tahun dalam Sejarah untuk satu laporan daripada rekod yang masih ada pada peranti. Tidak perlu menggabungkan fail harian secara manual.')],
+    [t('Will daily reports save automatically?', '每天的报表会自动保存吗？', 'Adakah laporan harian disimpan automatik?'), t('On Android, choose a report folder and enable automatic reports. Saving runs while the app is open in the foreground. A closed app cannot guarantee a midnight export. Web reports are downloaded manually.', 'Android 版选择报表文件夹并启用后，会在 App 开着、位于前台时自动保存。关掉 App 后，不保证半夜自动导出；网页版使用手动下载。', 'Pada Android, pilih folder dan aktifkan laporan automatik. Simpanan berjalan apabila aplikasi terbuka di latar depan. Aplikasi tertutup tidak menjamin eksport tengah malam. Laporan web dimuat turun secara manual.')],
+    [t('What happens if I change or lose my phone?', '换电话或电话坏了，资料怎么办？', 'Bagaimana jika saya tukar atau kehilangan telefon?'), t('Keep a full .cjpos backup outside the app. It can restore the shop on another device. Clearing browser or app data, or uninstalling the app, can remove local records.', '请定期把完整的 .cjpos 备份另外存好，之后可以在另一台设备还原。清除浏览器或 App 资料、卸载 App，都可能删除本机记录。', 'Simpan sandaran penuh .cjpos di luar aplikasi secara berkala. Ia boleh memulihkan kedai pada peranti lain. Memadam data pelayar atau aplikasi, atau menyahpasang aplikasi, boleh menghapuskan rekod tempatan.')],
+  ];
 
-          <button
-            type="button"
-            onClick={onKitchen}
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/15 px-3 text-sm font-bold text-white/85 transition-colors hover:border-primary/70 hover:bg-white/5 hover:text-primary"
-          >
-            <ChefHat className="h-5 w-5" aria-hidden="true" />
-            <span className="hidden sm:inline">Kitchen Display</span>
-            <span className="sm:hidden">KDS</span>
-          </button>
+  return <div className="cj-landing" lang={language === 'zh' ? 'zh-Hans' : language}>
+    <header className="cj-header cj-shell">
+      <a className="cj-brand" href="#" aria-label={t('CJ POS home', 'CJ POS 首页', 'Laman utama CJ POS')}>
+        <img src={APP_ICON_SRC} alt="" width="44" height="44" />
+        <span>CJ POS</span>
+      </a>
+      <nav className="cj-header-links" aria-label={t('Page navigation', '页面导航', 'Navigasi halaman')}>
+        <a href="#features">{t('How it works', '如何使用', 'Cara guna')}</a>
+        <a href="#guide">{t('Guide', '教学', 'Panduan')}</a>
+        <a href="#your-data">{t('Your data', '资料保存', 'Data anda')}</a>
+      </nav>
+      <label className="cj-language">
+        <Languages size={18} aria-hidden="true" />
+        <span className="cj-sr-only">{t('Language', '语言', 'Bahasa')}</span>
+        <select value={language} onChange={event => { void changeLanguage(event.target.value as 'en' | 'zh' | 'ms'); }}>
+          <option value="en">English</option><option value="zh">中文</option><option value="ms">Bahasa Melayu</option>
+        </select>
+      </label>
+    </header>
+
+    <main>
+      <section className="cj-hero cj-shell" aria-labelledby="cj-hero-title">
+        <div className="cj-hero-copy">
+          <p className="cj-eyebrow">{t('For the way small food businesses work', '为小店的日常生意而做', 'Untuk perniagaan makanan kecil')}</p>
+          <h1 id="cj-hero-title">{t('Good food.', '认真做美食，', 'Makanan sedap.')}<br /><span>{t('Simple orders.', '轻松管订单。', 'Pesanan teratur.')}</span></h1>
+          <p className="cj-hero-intro">{t('A free app for orders, payments and daily records. Made for food stalls, cafés and kuih sellers.', '点单、收款、备餐和报表，一个免费 App。小摊、糕点店、小餐馆，都能换上自己的菜单。', 'Aplikasi percuma untuk pesanan, bayaran dan rekod harian. Untuk gerai, kafe dan penjual kuih.')}</p>
+          <div className="cj-actions">
+            <a className="cj-button cj-button-primary" href="#/cashier">{t('Try web demo', '试玩网页版', 'Cuba demo web')}<ArrowRight size={19} aria-hidden="true" /></a>
+            <a className="cj-button cj-button-secondary" href={APK_URL} download="CJ_POS_0.1.3_Test.apk"><ArrowDownToLine size={19} aria-hidden="true" />{t('Download Android', '下载 Android', 'Muat turun Android')}</a>
+          </div>
         </div>
-      </header>
+        <figure className="cj-hero-visual">
+          <img className="cj-market-photo" src={asset('cj-pos-market-hero.webp')} alt={t('A small food counter with kuih and takeaway food', '摆有糕点与外带食品的小店柜台场景', 'Kaunter makanan kecil dengan kuih dan makanan bungkus')} width="1440" height="1440" fetchPriority="high" />
+          <div className="cj-phone-proof"><img src={asset('cj-pos-register-phone.jpg')} alt={t('Actual CJ POS phone Register screen', 'CJ POS 实际手机收银台界面', 'Skrin Daftar CJ POS sebenar pada telefon')} width="412" height="915" /></div>
+          <figcaption>{t('Illustrative scene with an actual app screenshot.', '场景图仅作示意，手机界面为实际 App 截图。', 'Gambaran suasana dengan tangkapan skrin aplikasi sebenar.')}</figcaption>
+        </figure>
+      </section>
 
-      <main>
-        <section className="mx-auto grid w-full max-w-7xl items-center gap-10 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14 lg:px-8 lg:py-20">
-          <div className="max-w-xl">
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm font-bold text-primary">
-              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-              {IS_PUBLIC_DEMO ? 'Public demo · No password required' : 'Private build · Staff access protected'}
-            </div>
+      <div className="cj-quick-facts cj-shell" aria-label={t('What to expect', '使用方式', 'Cara penggunaan')}>
+        <span><Smartphone aria-hidden="true" size={19} />{t('One device, one shop', '一台设备，一间小店', 'Satu peranti, satu kedai')}</span>
+        <span><Languages aria-hidden="true" size={19} />{t('English, Chinese & Malay', '英文、华语、马来文', 'Inggeris, Cina dan Melayu')}</span>
+        <span><HardDrive aria-hidden="true" size={19} />{t('Records stay on your device', '资料保存在你的设备', 'Rekod pada peranti anda')}</span>
+      </div>
 
-            <h1 className="text-balance text-4xl font-extrabold leading-[1.05] tracking-[-0.04em] sm:text-5xl lg:text-6xl">
-              One simple flow from order to kitchen.
-            </h1>
-            <p className="mt-5 max-w-lg text-pretty text-lg leading-8 text-white/72">
-              {IS_PUBLIC_DEMO
-                ? '给马来西亚小型餐饮商家的通用点单、收银和厨房流程。朋友可直接编辑菜单，为每道菜建立大小份、主食、肉类和加料等选项组。'
-                : '给马来西亚小型餐饮商家的通用点单、收银和厨房流程。先体验示范店，再进入员工后台处理菜单与订单。'}
-            </p>
-
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <button
-                type="button"
-                onClick={onStart}
-                className="inline-flex min-h-14 flex-1 items-center justify-center gap-3 rounded-xl bg-primary px-6 text-base font-extrabold text-on-primary shadow-xl shadow-black/30 transition-transform hover:-translate-y-0.5 hover:bg-primary-hover active:translate-y-0"
-              >
-                <UtensilsCrossed className="h-5 w-5" aria-hidden="true" />
-                Try sample store / 试用示范店
-                <ArrowRight className="h-5 w-5" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                onClick={onAdmin}
-                className="inline-flex min-h-14 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-6 text-base font-bold text-white transition-colors hover:border-white/35 hover:bg-white/10"
-              >
-                <MonitorSmartphone className="h-5 w-5" aria-hidden="true" />
-                {IS_PUBLIC_DEMO ? 'Edit demo menu / 编辑菜单' : 'Staff console / 员工后台'}
-              </button>
-            </div>
-
-            <p className="mt-4 flex items-start gap-2 text-sm leading-6 text-white/55">
-              <CloudOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              {IS_PUBLIC_DEMO
-                ? '当前为朋友公开 PWA 测试版；资料只保存在这台设备，已支持安装与断网重开，但还不是 Google Play 正式 APP。'
-                : '当前为内部测试版；员工入口受本机密码保护，但仍不是 Cloud 安全账号。'}
-            </p>
-            {IS_PUBLIC_DEMO && (
-              <div className="mt-3">
-                <PublicDemoReset buttonClassName="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-400/35 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-100 transition-colors hover:border-red-300/60 hover:bg-red-500/20 sm:w-auto" />
-              </div>
-            )}
+      <section id="features" className="cj-features cj-section cj-shell" aria-labelledby="cj-features-title">
+        <div className="cj-section-heading">
+          <h2 id="cj-features-title">{t('From the first order to closing time.', '从第一单，到每天收工。', 'Dari pesanan pertama hingga tutup kedai.')}</h2>
+          <p>{t('Six familiar jobs, in one place. Select a step to see the actual app.', '六件每天会做的事，放在同一个地方。点选步骤，看看实际界面。', 'Enam tugas harian di satu tempat. Pilih langkah untuk melihat aplikasi sebenar.')}</p>
+        </div>
+        <div className="cj-feature-layout">
+          <div className="cj-step-controls" role="group" aria-label={t('Explore the six steps', '浏览六个操作步骤', 'Lihat enam langkah')}>
+            {steps.map((step, index) => {
+              const Icon = step.icon;
+              return <button type="button" key={step.title} aria-pressed={activeStep === index} aria-controls="cj-step-panel" className={activeStep === index ? 'is-selected' : ''} onClick={() => setActiveStep(index)}>
+                <span className="cj-step-number">{String(index + 1).padStart(2, '0')}</span>
+                <span className="cj-step-label"><strong><Icon size={19} aria-hidden="true" />{step.title}</strong><small>{step.short}</small></span>
+                <ChevronRight size={18} aria-hidden="true" />
+              </button>;
+            })}
           </div>
-
-          <figure className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/5 shadow-2xl shadow-black/35">
-            <img
-              src={heroSrc}
-              alt="Illustration of a restaurant POS tablet coordinating orders, receipts and takeaway service"
-              className="aspect-[3/2] h-full w-full object-cover"
-              loading="eager"
-            />
-            <figcaption className="absolute inset-x-4 bottom-4 rounded-xl border border-white/10 bg-black/55 px-4 py-3 text-sm font-semibold text-white/90 backdrop-blur-md sm:inset-x-6 sm:bottom-6">
-              Customer order · Cashier · Kitchen display
-            </figcaption>
-          </figure>
-        </section>
-
-        <section className="border-y border-white/10 bg-white/[0.035]">
-          <div className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-8 sm:grid-cols-3 sm:px-6 lg:px-8">
-            {[
-              ['01', 'Customer ordering', '顾客手机浏览、选配与提交订单。'],
-              ['02', 'Menu & cashier control', '新增菜品和选项，再确认付款与处理订单。'],
-              ['03', 'Kitchen clarity', '厨房按等待顺序制作并标记完成。'],
-            ].map(([number, title, body]) => (
-              <article key={number} className="rounded-2xl border border-white/10 bg-black/15 p-5">
-                <p className="text-sm font-extrabold text-primary">{number}</p>
-                <h2 className="mt-2 text-lg font-bold">{title}</h2>
-                <p className="mt-2 text-sm leading-6 text-white/60">{body}</p>
-              </article>
-            ))}
+          <div id="cj-step-panel" className="cj-step-panel">
+            <figure className="cj-app-preview">
+              <img key={currentStep.image} src={asset(currentStep.image)} alt={t('Actual app screenshot: ', '实际 App 截图：', 'Tangkapan skrin aplikasi sebenar: ') + currentStep.title} width="1440" height="900" loading="lazy" />
+              <figcaption>{t('Actual test version. Orders and amounts shown are demonstration data.', '实际测试版界面，图中的订单和金额均为示范资料。', 'Versi ujian sebenar. Pesanan dan jumlah yang dipaparkan ialah data demonstrasi.')}</figcaption>
+            </figure>
+            <div className="cj-step-description" aria-live="polite">
+              <h3>{currentStep.heading}</h3>
+              <p>{currentStep.body}</p>
+              <p className="cj-step-note"><Check size={18} aria-hidden="true" />{currentStep.detail}</p>
+              <button type="button" className="cj-text-link" onClick={openSelectedStep}>{t('Open this screen', '打开这个功能', 'Buka skrin ini')}<ArrowRight size={17} aria-hidden="true" /></button>
+            </div>
           </div>
-        </section>
-      </main>
+        </div>
+      </section>
 
-      <footer className="mx-auto flex w-full max-w-7xl flex-col gap-1 px-4 py-6 text-xs leading-5 text-white/45 sm:px-6 lg:px-8">
-        <span>Working product name: CJ F&amp;B POS</span>
-        <span>Local device access is not a secure cloud account.</span>
-      </footer>
-    </div>
-  );
+      <section id="guide" className="cj-guide cj-section" aria-labelledby="cj-guide-title">
+        <div className="cj-shell cj-guide-layout">
+          <div className="cj-guide-copy">
+            <PlayCircle size={34} aria-hidden="true" />
+            <h2 id="cj-guide-title">{t('See it before you try it.', '先看一遍，再自己试。', 'Tonton dahulu, kemudian cuba.')}</h2>
+            <p>{t('Follow the Chinese-language walkthrough, from editing a menu to taking payment and keeping a backup.', '跟着华语教学，从修改菜单、点单和收款，一直看到报表与备份。', 'Ikuti panduan dalam bahasa Cina, daripada menyunting menu hingga bayaran, laporan dan sandaran.')}</p>
+            <p className="cj-video-language"><Volume2 size={18} aria-hidden="true" />{t('Chinese narration. Sound plays when you press play.', '华语配音，按播放后可开启声音。', 'Suara bahasa Cina. Bunyi dimainkan apabila anda tekan main.')}</p>
+          </div>
+          <div className="cj-video-wrap">
+            <video ref={videoRef} controls playsInline preload="metadata" poster={media('cj-pos-guide-poster.jpg')} onLoadedMetadata={() => setVideoState('ready')} onError={() => setVideoState('error')} aria-label={t('CJ POS guide with Chinese narration', 'CJ POS 华语有声教学', 'Panduan CJ POS dengan suara bahasa Cina')}>
+              <source src={media('cj-pos-guide-zh.mp4')} type="video/mp4" onError={() => setVideoState('error')} />
+              <track kind="captions" src={media('cj-pos-guide-zh.vtt')} srcLang="zh" label="中文" />
+              {t('Your browser cannot play this video.', '这个浏览器无法播放影片。', 'Pelayar anda tidak dapat memainkan video ini.')}
+            </video>
+            {videoState === 'error' && <div className="cj-media-message" role="status">
+              <p>{t('The video is not available yet. You can follow the six steps above and try the app.', '影片暂时无法播放，你可以先参考上方六个步骤，直接试玩。', 'Video belum tersedia. Anda boleh ikuti enam langkah di atas dan cuba aplikasi.')}</p>
+              <button type="button" onClick={() => { setVideoState('loading'); videoRef.current?.load(); }}>{t('Retry video', '重新加载影片', 'Cuba video semula')}</button>
+            </div>}
+          </div>
+        </div>
+      </section>
+
+      <section id="your-data" className="cj-data cj-section cj-shell" aria-labelledby="cj-data-title">
+        <div className="cj-section-heading">
+          <h2 id="cj-data-title">{t('Save the report. Keep the whole shop.', '报表留一份，整间店也备份。', 'Simpan laporan dan sandaran kedai.')}</h2>
+          <p>{t('Excel and a full backup do different jobs. Keep both for your daily business.', 'Excel 和完整备份，用途不同。每天看数字，也记得把原始资料留好。', 'Excel dan sandaran penuh mempunyai kegunaan berbeza. Simpan kedua-duanya untuk perniagaan harian.')}</p>
+        </div>
+        <div className="cj-file-comparison">
+          <article className="cj-file-type">
+            <FileSpreadsheet size={32} aria-hidden="true" /><span className="cj-file-extension">.xlsx</span>
+            <h3>{t('For your sales records', '用来看收入与明细', 'Untuk rekod jualan')}</h3>
+            <p>{t('A readable Excel report for a day, week, month or year. Four sheets keep the summary, daily totals, orders and items together.', '按日、周、月或年导出 Excel。四个工作表，分别放汇总、每日金额、订单和商品明细。', 'Laporan Excel untuk hari, minggu, bulan atau tahun. Empat helaian mengandungi ringkasan, jumlah harian, pesanan dan item.')}</p>
+            <ul>
+              <li><Check size={17} aria-hidden="true" />{t('Only confirmed receipts count toward revenue', '营收只计算实际已确认的收款', 'Hasil hanya mengira bayaran yang disahkan')}</li>
+              <li><Check size={17} aria-hidden="true" />{t('Export a full year directly from History', '在记录页直接导出全年，不必手动合并', 'Eksport setahun terus daripada Sejarah')}</li>
+              <li><Check size={17} aria-hidden="true" />{t('A report cannot restore the app', '报表不能用来还原 App', 'Laporan tidak dapat memulihkan aplikasi')}</li>
+            </ul>
+          </article>
+          <article className="cj-file-type cj-full-backup">
+            <FileArchive size={32} aria-hidden="true" /><span className="cj-file-extension">.cjpos</span>
+            <h3>{t('For restoring your shop', '用来还原整间店', 'Untuk memulihkan kedai')}</h3>
+            <p>{t('A full backup includes settings, menu, images, orders and cart. Keep a copy somewhere outside the app.', '完整备份包含门店设置、菜单、图片、订单和购物车。请另外存好一份，不要只留在 App 里。', 'Sandaran penuh merangkumi tetapan, menu, imej, pesanan dan troli. Simpan salinan di luar aplikasi.')}</p>
+            <ul>
+              <li><Check size={17} aria-hidden="true" />{t('Restore after changing devices', '换设备后，可以导入还原', 'Pulihkan selepas bertukar peranti')}</li>
+              <li><Check size={17} aria-hidden="true" />{t('Preview the backup before restoring', '还原前先预览备份内容', 'Pratonton sandaran sebelum pemulihan')}</li>
+              <li><Check size={17} aria-hidden="true" />{t('Restore replaces existing device data', '还原会取代这台设备现有资料', 'Pemulihan menggantikan data sedia ada')}</li>
+            </ul>
+          </article>
+        </div>
+        <aside className="cj-local-note">
+          <ShieldCheck size={30} aria-hidden="true" />
+          <div><h3>{t('Local storage means this device.', '本机保存，就是保存在这台设备。', 'Simpanan tempatan bermaksud peranti ini.')}</h3>
+            <p>{t('The website and Android app keep separate data. There is no automatic cloud or two-phone sync. Clearing data or uninstalling can remove your records, so save a full backup regularly.', '网站和 Android App 的资料各自保存，没有云端或两台电话自动同步。清除资料或卸载 App 可能丢失记录，请定期另存完整备份。', 'Laman web dan aplikasi Android menyimpan data berasingan. Tiada penyegerakan awan atau antara dua telefon. Memadam data atau menyahpasang boleh menghapuskan rekod, jadi simpan sandaran penuh secara berkala.')}</p>
+          </div>
+        </aside>
+      </section>
+
+      <section className="cj-faq cj-section cj-shell" aria-labelledby="cj-faq-title">
+        <div><h2 id="cj-faq-title">{t('Before your first day.', '开始使用前，先知道这些。', 'Sebelum hari pertama anda.')}</h2><p>{t('A few practical answers for your counter.', '几个和每天营业有关的实际问题。', 'Jawapan praktikal untuk kaunter anda.')}</p></div>
+        <div className="cj-faq-items">{faqs.map(([question, answer]) => <details key={question}><summary>{question}<ChevronRight size={19} aria-hidden="true" /></summary><p>{answer}</p></details>)}</div>
+      </section>
+
+      <section className="cj-get-started cj-shell" aria-labelledby="cj-start-title">
+        <MonitorSmartphone size={38} aria-hidden="true" />
+        <div><h2 id="cj-start-title">{t('Try one order with your own menu.', '换上自己的菜单，试着开一单。', 'Cuba satu pesanan dengan menu anda.')}</h2><p>{t('Start in your browser, or download the free Android test app.', '先在浏览器试用，或下载免费的 Android 测试版。', 'Mula dalam pelayar atau muat turun aplikasi ujian Android percuma.')}</p></div>
+        <div className="cj-actions"><a className="cj-button cj-button-primary" href="#/cashier">{t('Try web demo', '试玩网页版', 'Cuba demo web')}<ArrowRight size={18} aria-hidden="true" /></a><a className="cj-button cj-button-secondary" href={APK_URL} download="CJ_POS_0.1.3_Test.apk"><ArrowDownToLine size={18} aria-hidden="true" />{t('Download Android', '下载 Android', 'Muat turun Android')}</a></div>
+      </section>
+    </main>
+
+    <footer className="cj-footer cj-shell">
+      <div className="cj-footer-brand"><img src={APP_ICON_SRC} alt="" width="36" height="36" /><strong>CJ POS</strong></div>
+      <p>{t('Free test version 0.1.3. For one device. Not yet on Google Play.', '免费测试版 0.1.3，适用于单台设备，目前未上架 Google Play。', 'Versi ujian percuma 0.1.3. Untuk satu peranti. Belum di Google Play.')}</p>
+      {IS_PUBLIC_DEMO && <details className="cj-demo-tools"><summary>{t('Demo data tools', '示范资料管理', 'Alat data demo')}</summary><PublicDemoReset buttonClassName="cj-reset-button" /></details>}
+    </footer>
+  </div>;
 }

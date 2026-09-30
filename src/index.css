@@ -67,6 +67,50 @@ button:not(:disabled),
   padding-top: env(safe-area-inset-top);
 }
 
+/* The operating screens follow device text size and wrap at the available
+   container width. The marketing landing keeps its own typography. */
+.pos-workspace {
+  font-size: 1rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.pos-workspace :where(button, input:not([type='checkbox']):not([type='radio']), select, textarea) {
+  min-height: 3rem;
+}
+
+.pos-workspace :where(input, select, textarea) {
+  font-size: 1rem;
+  max-width: 100%;
+}
+
+.pos-workspace .text-xs,
+.pos-workspace .text-\[10px\],
+.pos-workspace .text-\[11px\] {
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.pos-workspace :where(h1, h2, h3, h4, p, label, button) {
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+@media (min-width: 768px) {
+  .pos-workspace { font-size: 1.0625rem; }
+}
+
+.register-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
+.register-menu-area { container-type: inline-size; }
+.register-menu-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+@container (max-width: 19rem) { .register-menu-grid { grid-template-columns: minmax(0, 1fr); } }
+@container (min-width: 37.5rem) { .register-menu-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@container (min-width: 53.125rem) { .register-menu-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1200px) {
+  .register-layout { grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem); align-items: start; }
+  .register-cart { position: sticky; top: 6rem; max-height: calc(100dvh - 12rem); overflow-y: auto; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -1,513 +1,316 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { Order, CartItem, Language, PaymentMethod, SalesStats, ShopSettings } from './types';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { format } from 'date-fns';
-import { GAS_URL, SIZES, NOODLE_BASES, ADD_ONS } from './constants';
+import type { CartItem, Language, Order, OrderType, PaymentMethod, SalesStats, ShopSettings } from './types';
+import { GAS_URL } from './constants';
 import { createDemoBaselineSettings } from './demo-baseline';
-import { normalizeMenuItemOptionGroups } from './domain/menu-options';
-import { getCartItemDisplay, hydrateCartItemSnapshots } from './domain/cart-item-display';
-import {
-  ACTIVE_DEMO_SYNC_CHANNEL_NAME,
-  PUBLIC_DEMO_RESET_MESSAGE,
-  PUBLIC_DEMO_RESET_SIGNAL_KEY,
-} from './demo-reset';
+import { IS_PUBLIC_DEMO } from './demo-mode';
+import { ACTIVE_DEMO_SYNC_CHANNEL_NAME, PUBLIC_DEMO_RESET_MESSAGE, PUBLIC_DEMO_RESET_SIGNAL_KEY } from './demo-reset';
+import { ALL_LEGACY_KEYS } from './data/migrations/legacy-keys';
+import { IndexedDbPosRepository, type PosRead } from './storage/pos-idb';
+import { PhotoUrlRegistry, prepareSettingsPhotos } from './storage/pos-photos';
+import { backupPreviewToRead, createCjposBackup, previewCjposBackup, type BackupPreview } from './storage/cjpos-backup';
+import { addCartItemMutation, changeLanguageMutation, clearCartMutation, createOrderMutation, markPaidMutation, removeCartItemMutation, updateCartItemMutation, updateStatusMutation } from './storage/pos-operations';
+import { migrateLegacySnapshot, normalizeSettings, readLegacySnapshot, renameLegacyDemoSettings } from './storage/pos-legacy';
 
-const ORDERS_KEY = 'golden_sea_laksa_orders';
-const CART_KEY = 'golden_sea_laksa_cart';
-const LANG_KEY = 'golden_sea_laksa_lang';
-const SETTINGS_KEY = 'golden_sea_laksa_settings';
-const POLL_INTERVAL = 5000; // 5 seconds
+const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(ACTIVE_DEMO_SYNC_CHANNEL_NAME) : null;
+const USE_EXPERIMENTAL_GAS = Boolean(GAS_URL) && !IS_PUBLIC_DEMO && import.meta.env.VITE_ANDROID_APP !== 'true';
 
-// BroadcastChannel for cross-tab sync (different browser tabs)
-const channel = typeof BroadcastChannel !== 'undefined'
-  ? new BroadcastChannel(ACTIVE_DEMO_SYNC_CHANNEL_NAME)
-  : null;
-
-// ==================== GAS API Helpers ====================
-async function gasPost(data: Record<string, any>): Promise<any> {
-  if (!GAS_URL) return null;
+async function gasPost(data: Record<string, unknown>): Promise<void> {
+  if (!USE_EXPERIMENTAL_GAS) return;
   try {
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(data),
-    });
-    return await res.json();
-  } catch (e) {
-    console.warn('[GAS POST] Failed:', e);
-    return null;
-  }
+    await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(data) });
+  } catch (error) { console.warn('[Optional GAS sync] Failed:', error); }
 }
 
 async function gasGet(params: Record<string, string>): Promise<any> {
-  if (!GAS_URL) return null;
+  if (!USE_EXPERIMENTAL_GAS) return null;
   try {
     const url = new URL(GAS_URL);
-    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-    const res = await fetch(url.toString());
-    return await res.json();
-  } catch (e) {
-    console.warn('[GAS GET] Failed:', e);
-    return null;
-  }
+    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+    const response = await fetch(url);
+    return await response.json();
+  } catch (error) { console.warn('[Optional GAS stats] Failed:', error); return null; }
 }
 
-// ==================== Store Types ====================
-interface StoreState {
+export interface StoreState {
   orders: Order[];
   cart: CartItem[];
   language: Language;
   isOnline: boolean;
   isSyncing: boolean;
-  changeLanguage: (lang: Language) => void;
-  addToCart: (item: Omit<CartItem, 'id'>) => void;
-  removeFromCart: (id: string) => void;
-  clearCart: () => void;
-  submitOrder: (orderType: 'Dine-in' | 'Takeaway', tableNo?: string) => Promise<string | null>;
-  markAsPaid: (localOrderId: string, paymentMethod: PaymentMethod) => void;
-  updateOrderStatus: (localOrderId: string, status: 'Preparing' | 'Completed' | 'Cancelled') => void;
-  fetchStats: (from: string, to: string) => Promise<SalesStats | null>;
+  ready: boolean;
+  revision: number;
+  saveStatus: 'saving' | 'saved' | 'error';
+  storageError: string | null;
   settings: ShopSettings;
-  updateSettings: (newSettings: ShopSettings) => void;
+  changeLanguage: (lang: Language) => Promise<boolean>;
+  addToCart: (item: Omit<CartItem, 'id'>) => Promise<boolean>;
+  updateCartItem: (id: string, patch: Partial<Omit<CartItem, 'id'>>) => Promise<boolean>;
+  removeFromCart: (id: string) => Promise<boolean>;
+  clearCart: () => Promise<boolean>;
+  submitOrder: (orderType: OrderType, tableNo?: string, confirmedPaymentMethod?: PaymentMethod) => Promise<string | null>;
+  markAsPaid: (localOrderId: string, paymentMethod: PaymentMethod) => Promise<boolean>;
+  updateOrderStatus: (localOrderId: string, status: 'Preparing' | 'Completed' | 'Cancelled') => Promise<boolean>;
+  updateSettings: (settings: ShopSettings) => Promise<boolean>;
+  fetchStats: (from: string, to: string) => Promise<SalesStats | null>;
+  createBackup: () => Promise<Blob>;
+  previewBackup: (file: Blob) => Promise<BackupPreview>;
+  restoreBackup: (preview: BackupPreview) => Promise<boolean>;
+  resetDemo: () => Promise<boolean>;
 }
 
-// ==================== React Context ====================
 const StoreContext = createContext<StoreState | null>(null);
+
+function storageMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unable to save local data on this device.';
+}
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [language, setLanguage] = useState<Language>('en');
-  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [settings, setSettings] = useState<ShopSettings>(() => {
-    const baselineSettings = createDemoBaselineSettings();
-    const oldQr = localStorage.getItem('golden_sea_laksa_qr_image');
-    if (oldQr) {
-      baselineSettings.qrImage = oldQr;
-      localStorage.removeItem('golden_sea_laksa_qr_image');
-    }
-    const stored = localStorage.getItem(SETTINGS_KEY);
-    const parsed = stored ? JSON.parse(stored) : baselineSettings;
+  const [settings, setSettings] = useState<ShopSettings>(createDemoBaselineSettings);
+  const [revision, setRevision] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<StoreState['saveStatus']>('saved');
+  const [storageError, setStorageError] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
+  const repositoryRef = useRef(new IndexedDbPosRepository());
+  const photoRegistryRef = useRef(new PhotoUrlRegistry());
+  const initRef = useRef<Promise<PosRead> | null>(null);
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
+  const submitLockedRef = useRef(false);
+  const pendingWritesRef = useRef(0);
 
-    // Idempotent compatibility adapter for legacy menu arrays.
-    if (parsed.menuItems) {
-      parsed.menuItems = parsed.menuItems.map((item: any) => normalizeMenuItemOptionGroups({
-        ...item,
-        sizes: item.sizes || [...SIZES],
-        noodleBases: item.noodleBases || [...NOODLE_BASES],
-        addOns: item.addOns || [...ADD_ONS],
-      }));
-    }
-    parsed.enableTax = parsed.enableTax ?? false;
-    parsed.taxRate = parsed.taxRate ?? 6;
-    parsed.takeawayFee = parsed.takeawayFee ?? 0.50;
+  const publish = useCallback((read: PosRead) => {
+    const hydratedSettings = photoRegistryRef.current.hydrate(read.state.settings, read.photos, read.photoVersions);
+    setOrders(read.state.orders);
+    setCart(read.state.cart);
+    setSettings(hydratedSettings);
+    setLanguage(read.state.language);
+    setRevision(read.state.revision);
+  }, []);
 
-    return parsed as ShopSettings;
-  });
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Keep a ref to orders so async functions always have the latest
-  const ordersRef = useRef<Order[]>(orders);
-  ordersRef.current = orders;
+  const ensureReady = useCallback((): Promise<PosRead> => {
+    if (!initRef.current) initRef.current = (async () => {
+      const existing = await repositoryRef.current.read();
+      if (existing && renameLegacyDemoSettings(existing.state.settings, IS_PUBLIC_DEMO || import.meta.env.VITE_ANDROID_APP === 'true') !== existing.state.settings) {
+        await repositoryRef.current.mutate(current => ({ state: { ...current,
+          settings: renameLegacyDemoSettings(current.settings, true), revision: current.revision + 1 }, value: true }));
+        const renamed = await repositoryRef.current.read();
+        if (!renamed) throw new Error('Saved shop could not be reopened.');
+        return renamed;
+      }
+      return existing ?? repositoryRef.current.initialize(await migrateLegacySnapshot(readLegacySnapshot(localStorage)));
+    })();
+    return initRef.current;
+  }, []);
 
-  // ---- Load initial state ----
   useEffect(() => {
-    const storedOrders = localStorage.getItem(ORDERS_KEY);
-    if (storedOrders) {
-      // Orders are never pruned by age. Sales history is the merchant's own
-      // record; only they decide when to archive or delete it. Freeing storage
-      // is handled by image compression and an explicit Archive/Export action,
-      // not by quietly dropping last month's takings.
-      const parsedOrders: Order[] = JSON.parse(storedOrders);
-      const hydratedOrders = parsedOrders.map((order) => ({
-        ...order,
-        items: (order.items ?? []).map((item) => hydrateCartItemSnapshots(
-          item,
-          settings.menuItems.find((menuItem) => menuItem.id === item.menuItemId),
-        )),
-      }));
-      setOrders(hydratedOrders);
-      // Persist the one-time snapshots so later menu edits cannot rewrite the
-      // names shown by an older order after the next reload.
-      try {
-        localStorage.setItem(ORDERS_KEY, JSON.stringify(hydratedOrders));
-      } catch (error) {
-        console.warn('[Order snapshots] Could not persist compatibility upgrade:', error);
-      }
-    }
-
-    const storedCart = localStorage.getItem(CART_KEY);
-    if (storedCart) {
-      const parsedCart: CartItem[] = JSON.parse(storedCart);
-      const hydratedCart = parsedCart.map((item) => hydrateCartItemSnapshots(
-        item,
-        settings.menuItems.find((menuItem) => menuItem.id === item.menuItemId),
-      ));
-      setCart(hydratedCart);
-      try {
-        localStorage.setItem(CART_KEY, JSON.stringify(hydratedCart));
-      } catch (error) {
-        console.warn('[Cart snapshots] Could not persist compatibility upgrade:', error);
-      }
-    }
-
-    const storedLang = localStorage.getItem(LANG_KEY);
-    if (storedLang) setLanguage(storedLang as Language);
-
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    // BroadcastChannel listener (for cross-tab sync)
-    const applyPublicDemoReset = () => {
-      setSettings(createDemoBaselineSettings());
-      setOrders([]);
-      setCart([]);
-      setLanguage('en');
-    };
-
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'orders_updated') {
-        setOrders(event.data.orders);
-      } else if (event.data?.type === 'settings_updated') {
-        setSettings({
-          ...event.data.settings,
-          menuItems: event.data.settings.menuItems.map(normalizeMenuItemOptionGroups),
-        });
-      } else if (event.data?.type === PUBLIC_DEMO_RESET_MESSAGE) {
-        applyPublicDemoReset();
-      }
-    };
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === PUBLIC_DEMO_RESET_SIGNAL_KEY && event.newValue !== null) {
-        applyPublicDemoReset();
-      }
-    };
-    channel?.addEventListener('message', handleMessage);
-    window.addEventListener('storage', handleStorage);
-
+    let active = true;
+    ensureReady().then(read => {
+      if (!active) return;
+      publish(read);
+      setReady(true);
+      setStorageError(null);
+    }).catch(error => {
+      if (!active) return;
+      setSaveStatus('error');
+      setStorageError(storageMessage(error));
+    });
+    const online = () => setIsOnline(true);
+    const offline = () => setIsOnline(false);
+    window.addEventListener('online', online);
+    window.addEventListener('offline', offline);
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      window.removeEventListener('storage', handleStorage);
-      channel?.removeEventListener('message', handleMessage);
+      active = false;
+      window.removeEventListener('online', online);
+      window.removeEventListener('offline', offline);
+      photoRegistryRef.current.revokeAll();
     };
-  }, []);
+  }, [ensureReady, publish]);
 
-  // ---- Polling: fetch orders from Google Sheet every 5s ----
+  const reloadAfterCommit = useCallback(async () => {
+    const read = await repositoryRef.current.read();
+    if (!read) throw new Error('Saved data disappeared from this device.');
+    publish(read);
+    return read;
+  }, [publish]);
+
+  const queuedWrite = useCallback(<T,>(work: () => Promise<T>, fallback: T, broadcast = true): Promise<T> => {
+    pendingWritesRef.current += 1;
+    setSaveStatus('saving');
+    const operation = queueRef.current.then(async () => {
+      await ensureReady();
+      const result = await work();
+      try {
+        const read = await reloadAfterCommit();
+        if (broadcast) channel?.postMessage({ type: 'data_committed', revision: read.state.revision });
+        setStorageError(null);
+      } catch (error) {
+        // The transaction has already committed. Return its real outcome so a
+        // caller cannot retry a successfully stored order as a duplicate.
+        setStorageError(`Data saved, but this screen could not refresh: ${storageMessage(error)}`);
+        setSaveStatus('error');
+      }
+      return result;
+    }).catch(error => {
+      setStorageError(storageMessage(error));
+      setSaveStatus('error');
+      return fallback;
+    }).finally(() => {
+      pendingWritesRef.current -= 1;
+      if (pendingWritesRef.current === 0) setSaveStatus(current => current === 'error' ? current : 'saved');
+    });
+    queueRef.current = operation.then(() => undefined);
+    return operation;
+  }, [ensureReady, reloadAfterCommit]);
+
   useEffect(() => {
-    if (!GAS_URL) return;
-
-    const pollOrders = async () => {
-      try {
-        const today = format(new Date(), 'yyyy-MM-dd');
-        const result = await gasGet({ action: 'getOrders', date: today });
-        if (result?.success && result.orders) {
-          const remoteOrders: Order[] = result.orders.map((o: any) => ({
-            ...o,
-            items: [],
-            paid: !!o.paid,
-            synced: true,
-          }));
-
-          setOrders(prev => {
-            const merged = [...prev];
-
-            remoteOrders.forEach(remote => {
-              const localIndex = merged.findIndex(l => l.local_order_id === remote.local_order_id);
-              if (localIndex === -1) {
-                // New order from remote. Only accept if it has valid data (avoid broken GAS rows)
-                if (remote.total_qty > 0 || remote.total_amount > 0) {
-                  merged.push(remote);
-                }
-              } else {
-                // Exists locally. ONLY update status and paid to avoid overwriting items with GAS zeroes.
-                const local = merged[localIndex];
-                if (remote.status) {
-                  merged[localIndex] = {
-                    ...local,
-                    status: remote.status,
-                    paid: remote.paid,
-                    payment_method: remote.payment_method || local.payment_method,
-                    synced: true
-                  };
-                }
-              }
-            });
-
-            merged.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-
-            // Recalculate order_ids for current month based on chronological order (earliest first)
-            const currentMonthStr = format(new Date(), 'yyyy-MM');
-            const month = new Date().getMonth() + 1;
-
-            const monthOrdersAsc = [...merged]
-              .filter(o => o.timestamp.startsWith(currentMonthStr) && o.status !== 'Cancelled')
-              .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-
-            const idMap = new Map<string, string>();
-            monthOrdersAsc.forEach((o, idx) => {
-              idMap.set(o.local_order_id, `${month * 10000 + idx + 1}`);
-            });
-
-            merged.forEach(o => {
-              if (idMap.has(o.local_order_id)) {
-                o.order_id = idMap.get(o.local_order_id)!;
-              }
-            });
-
-            localStorage.setItem(ORDERS_KEY, JSON.stringify(merged));
-            return merged;
-          });
-        }
-      } catch (e) {
-        // Polling failure is silent
-      }
+    const reloadFromAnotherTab = () => {
+      queueRef.current = queueRef.current.then(async () => {
+        await ensureReady();
+        await reloadAfterCommit();
+      }).catch(error => {
+        setSaveStatus('error');
+        setStorageError(storageMessage(error));
+      });
     };
-
-    pollOrders();
-    pollRef.current = setInterval(pollOrders, POLL_INTERVAL);
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'data_committed' || event.data?.type === PUBLIC_DEMO_RESET_MESSAGE) reloadFromAnotherTab();
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === PUBLIC_DEMO_RESET_SIGNAL_KEY) reloadFromAnotherTab();
+    };
+    channel?.addEventListener('message', onMessage);
+    window.addEventListener('storage', onStorage);
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      channel?.removeEventListener('message', onMessage);
+      window.removeEventListener('storage', onStorage);
     };
-  }, []);
+  }, [ensureReady, reloadAfterCommit]);
 
-  // ---- Broadcast orders to other tabs ----
-  const broadcastOrders = useCallback((newOrders: Order[]) => {
-    channel?.postMessage({ type: 'orders_updated', orders: newOrders });
-  }, []);
+  const changeLanguage = useCallback((lang: Language) => queuedWrite(async () => {
+    const result = await repositoryRef.current.mutate(current => changeLanguageMutation(current, lang));
+    return result?.value ?? false;
+  }, false), [queuedWrite]);
 
-  // ---- Save orders locally + broadcast ----
-  const saveOrders = useCallback((newOrders: Order[]) => {
-    setOrders(newOrders);
-    localStorage.setItem(ORDERS_KEY, JSON.stringify(newOrders));
-    broadcastOrders(newOrders);
-  }, [broadcastOrders]);
+  const addToCart = useCallback((item: Omit<CartItem, 'id'>) => queuedWrite(async () => {
+    const result = await repositoryRef.current.mutate(current => addCartItemMutation(current, item, uuidv4()));
+    return result?.value ?? false;
+  }, false), [queuedWrite]);
 
-  const saveCart = useCallback((newCart: CartItem[]) => {
-    setCart(newCart);
-    localStorage.setItem(CART_KEY, JSON.stringify(newCart));
-  }, []);
+  const updateCartItem = useCallback((id: string, patch: Partial<Omit<CartItem, 'id'>>) => queuedWrite(async () => {
+    const result = await repositoryRef.current.mutate(current => updateCartItemMutation(current, id, patch));
+    return result?.value ?? false;
+  }, false), [queuedWrite]);
 
-  const updateSettings = useCallback((newSettings: ShopSettings) => {
-    const normalizedSettings = {
-      ...newSettings,
-      menuItems: newSettings.menuItems.map(normalizeMenuItemOptionGroups),
-    };
-    setSettings(normalizedSettings);
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalizedSettings));
-    channel?.postMessage({ type: 'settings_updated', settings: normalizedSettings });
-  }, []);
+  const removeFromCart = useCallback((id: string) => queuedWrite(async () => {
+    const result = await repositoryRef.current.mutate(current => removeCartItemMutation(current, id));
+    return result?.value ?? false;
+  }, false), [queuedWrite]);
 
-  const changeLanguage = useCallback((lang: Language) => {
-    setLanguage(lang);
-    localStorage.setItem(LANG_KEY, lang);
-  }, []);
+  const clearCart = useCallback(() => queuedWrite(async () => {
+    const result = await repositoryRef.current.mutate(clearCartMutation);
+    return result?.value ?? false;
+  }, false), [queuedWrite]);
 
-  const addToCart = useCallback((item: Omit<CartItem, 'id'>) => {
-    const newItem = { ...item, id: uuidv4() };
-    setCart(prev => {
-      const updated = [...prev, newItem];
-      localStorage.setItem(CART_KEY, JSON.stringify(updated));
-      return updated;
-    });
-  }, []);
-
-  const removeFromCart = useCallback((id: string) => {
-    setCart(prev => {
-      const updated = prev.filter(item => item.id !== id);
-      localStorage.setItem(CART_KEY, JSON.stringify(updated));
-      return updated;
-    });
-  }, []);
-
-  const clearCart = useCallback(() => {
-    setCart([]);
-    localStorage.setItem(CART_KEY, JSON.stringify([]));
-  }, []);
-
-  const generateItemsSummary = (items: CartItem[], lang: Language): string => {
-    return items.map(item => {
-      const menuItem = settings.menuItems.find(m => m.id === item.menuItemId);
-      const display = getCartItemDisplay(item, menuItem, lang);
-      const details = display.details.length ? `-${display.details.join('-')}` : '';
-      return `${item.quantity}x ${display.itemName}${details}`;
-    }).filter(Boolean).join('; ');
-  };
-
-  // ---- Submit Order ----
-  const submitOrder = useCallback(async (orderType: 'Dine-in' | 'Takeaway', tableNo?: string): Promise<string | null> => {
-    // Read current cart from state ref
-    const currentCart = cart;
-    if (currentCart.length === 0) return null;
-
-    const totalQty = currentCart.reduce((sum, item) => sum + item.quantity, 0);
-    const subtotal = currentCart.reduce((sum, item) => sum + item.totalPrice, 0);
-
-    let takeaway_fee = 0;
-    if (orderType === 'Takeaway') takeaway_fee = settings.takeawayFee;
-
-    let tax_amount = 0;
-    if (settings.enableTax) {
-      tax_amount = parseFloat(((subtotal + takeaway_fee) * (settings.taxRate / 100)).toFixed(2));
-    }
-
-    const totalAmount = subtotal + takeaway_fee + tax_amount;
-
-    const itemsSummary = generateItemsSummary(currentCart, language);
-
-    const currentOrders = ordersRef.current;
-
-    // Calculate Monthly orders count based on chronological sort
-    const now = new Date();
-    const currentMonthStr = format(now, 'yyyy-MM');
-    const month = now.getMonth() + 1;
-
-    const monthOrders = currentOrders.filter(o => o.timestamp.startsWith(currentMonthStr) && o.status !== 'Cancelled');
-    const orderId = `${month * 10000 + monthOrders.length + 1}`;
-
-    const newOrder: Order = {
-      local_order_id: uuidv4(),
-      order_id: orderId,
-      timestamp: format(new Date(), 'yyyy-MM-dd HH:mm:ss'),
-      order_type: orderType,
-      table_no: tableNo,
-      items_summary: itemsSummary,
-      items: [...currentCart],
-      total_qty: totalQty,
-      subtotal,
-      takeaway_fee,
-      tax_amount,
-      total_amount: totalAmount,
-      status: 'Pending',
-      paid: false,
-      synced: false
-    };
-
-    const updatedOrders = [newOrder, ...currentOrders];
-
-    // Safety recount for the UI state so it immediately reflects the proper sorted ID
-    const sortedMonthAsc = [...updatedOrders]
-      .filter(o => o.timestamp.startsWith(currentMonthStr) && o.status !== 'Cancelled')
-      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-    const finalMap = new Map<string, string>();
-    sortedMonthAsc.forEach((o, idx) => finalMap.set(o.local_order_id, `${month * 10000 + idx + 1}`));
-    updatedOrders.forEach(o => {
-      if (finalMap.has(o.local_order_id)) {
-        o.order_id = finalMap.get(o.local_order_id)!;
-      }
-    });
-
-    saveOrders(updatedOrders);
-
-    // Clear cart
-    setCart([]);
-    localStorage.setItem(CART_KEY, JSON.stringify([]));
-
-    // Sync to Google Sheet
-    const result = await gasPost({
-      action: 'addOrder',
-      ...newOrder,
-      items: undefined,
-    });
-    if (result?.success) {
-      // Use functional update to ensure latest state
-      setOrders(prev => {
-        const synced = prev.map(o =>
-          o.local_order_id === newOrder.local_order_id ? { ...o, synced: true } : o
-        );
-        localStorage.setItem(ORDERS_KEY, JSON.stringify(synced));
-        broadcastOrders(synced);
-        return synced;
-      });
-    }
-
-    return newOrder.local_order_id;
-  }, [cart, language, saveOrders, broadcastOrders, settings.menuItems]);
-
-  // ---- Mark as Paid ----
-  const markAsPaid = useCallback((localOrderId: string, paymentMethod: PaymentMethod) => {
-    setOrders(prev => {
-      const updated = prev.map(o => {
-        if (o.local_order_id === localOrderId) {
-          const newStatus = o.status === 'Pending' ? 'Preparing' : o.status;
-          return { ...o, paid: true, payment_method: paymentMethod, status: newStatus as any };
+  const submitOrder = useCallback(async (orderType: OrderType, tableNo?: string, confirmedPaymentMethod?: PaymentMethod): Promise<string | null> => {
+    if (submitLockedRef.current) return null;
+    submitLockedRef.current = true;
+    try {
+      return await queuedWrite(async () => {
+        const now = new Date();
+        const result = await repositoryRef.current.mutate(current => createOrderMutation(current, orderType, tableNo, confirmedPaymentMethod, now, uuidv4()));
+        if (result?.value && USE_EXPERIMENTAL_GAS) {
+          const created = result.state.orders.find(order => order.local_order_id === result.value);
+          if (created) void gasPost({ action: 'addOrder', ...created, items: undefined });
         }
-        return o;
-      });
-      localStorage.setItem(ORDERS_KEY, JSON.stringify(updated));
-      broadcastOrders(updated);
-      return updated;
-    });
+        return result?.value ?? null;
+      }, null);
+    } finally { submitLockedRef.current = false; }
+  }, [queuedWrite]);
 
-    const order = ordersRef.current.find(o => o.local_order_id === localOrderId);
-    const newStatus = order?.status === 'Pending' ? 'Preparing' : (order?.status || 'Preparing');
+  const markAsPaid = useCallback((localOrderId: string, paymentMethod: PaymentMethod) => queuedWrite(async () => {
+    const result = await repositoryRef.current.mutate(current => markPaidMutation(current, localOrderId, paymentMethod, new Date()));
+    if (result?.value && result.changed !== false && USE_EXPERIMENTAL_GAS) {
+      const order = result.state.orders.find(item => item.local_order_id === localOrderId);
+      if (order) void gasPost({ action: 'updateStatus', local_order_id: localOrderId, status: order.status, paid: true, paid_at: order.paid_at, payment_method: paymentMethod });
+    }
+    return result?.value ?? false;
+  }, false), [queuedWrite]);
 
-    gasPost({
-      action: 'updateStatus',
-      local_order_id: localOrderId,
-      status: newStatus,
-      paid: true,
-      payment_method: paymentMethod,
-    });
-  }, [broadcastOrders]);
+  const updateOrderStatus = useCallback((localOrderId: string, status: 'Preparing' | 'Completed' | 'Cancelled') => queuedWrite(async () => {
+    const result = await repositoryRef.current.mutate(current => updateStatusMutation(current, localOrderId, status));
+    if (result?.value && result.changed !== false && USE_EXPERIMENTAL_GAS) void gasPost({ action: 'updateStatus', local_order_id: localOrderId, status });
+    return result?.value ?? false;
+  }, false), [queuedWrite]);
 
-  // ---- Update Order Status ----
-  const updateOrderStatus = useCallback((localOrderId: string, status: 'Preparing' | 'Completed' | 'Cancelled') => {
-    setOrders(prev => {
-      const updated = prev.map(o =>
-        o.local_order_id === localOrderId ? { ...o, status } : o
-      );
-      localStorage.setItem(ORDERS_KEY, JSON.stringify(updated));
-      broadcastOrders(updated);
-      return updated;
-    });
+  const updateSettings = useCallback((input: ShopSettings) => queuedWrite(async () => {
+    const current = await repositoryRef.current.read();
+    if (!current) throw new Error('Local data is not ready.');
+    const normalized = normalizeSettings(input, createDemoBaselineSettings(), IS_PUBLIC_DEMO || import.meta.env.VITE_ANDROID_APP === 'true');
+    const prepared = await prepareSettingsPhotos(normalized, photoRegistryRef.current, current.photos);
+    const result = await repositoryRef.current.mutate(state => ({ state: { ...state, settings: prepared.settings }, value: true }), prepared.photos);
+    return result?.value ?? false;
+  }, false), [queuedWrite]);
 
-    gasPost({
-      action: 'updateStatus',
-      local_order_id: localOrderId,
-      status,
-    });
-  }, [broadcastOrders]);
-
-  // ---- Fetch Sales Stats from GAS ----
   const fetchStats = useCallback(async (from: string, to: string): Promise<SalesStats | null> => {
     const result = await gasGet({ action: 'getStats', from, to });
-    if (result?.success) {
-      return { totals: result.totals, daily: result.daily };
-    }
-    return null;
+    return result?.success ? { totals: result.totals, daily: result.daily } : null;
   }, []);
 
-  const value: StoreState = {
-    orders,
-    cart,
-    language,
-    isOnline,
-    isSyncing,
-    changeLanguage,
-    addToCart,
-    removeFromCart,
-    clearCart,
-    submitOrder,
-    markAsPaid,
-    updateOrderStatus,
-    fetchStats,
-    settings,
-    updateSettings,
-  };
+  const createBackup = useCallback(async (): Promise<Blob> => {
+    await ensureReady();
+    await queueRef.current;
+    const read = await repositoryRef.current.read();
+    if (!read) throw new Error('Local data is unavailable for backup.');
+    return createCjposBackup(read);
+  }, [ensureReady]);
 
+  const previewBackup = useCallback((file: Blob): Promise<BackupPreview> => previewCjposBackup(file), []);
+
+  const restoreBackup = useCallback((preview: BackupPreview) => queuedWrite(async () => {
+    const current = await repositoryRef.current.read();
+    if (!current) throw new Error('Local data is unavailable for restore.');
+    await repositoryRef.current.replace(backupPreviewToRead(preview, current.state.revision));
+    return true;
+  }, false), [queuedWrite]);
+
+  const resetDemo = useCallback(() => queuedWrite(async () => {
+    const current = await repositoryRef.current.read();
+    const prepared = await prepareSettingsPhotos(createDemoBaselineSettings(), null, new Map(), false);
+    await repositoryRef.current.reset({
+      state: { orders: [], cart: [], settings: prepared.settings, language: 'en', revision: (current?.state.revision ?? 0) + 1 },
+      photos: prepared.photos,
+      photoVersions: Object.fromEntries([...prepared.photos.keys()].map(key => [key, uuidv4()])),
+      legacySnapshot: current?.legacySnapshot ?? readLegacySnapshot(localStorage),
+    });
+    for (const key of ALL_LEGACY_KEYS) {
+      try { localStorage.removeItem(key); } catch { /* IDB already contains the reset state. */ }
+    }
+    return true;
+  }, false), [queuedWrite]);
+
+  const value: StoreState = {
+    orders, cart, language, isOnline, isSyncing: false, ready, revision, saveStatus, storageError, settings,
+    changeLanguage, addToCart, updateCartItem, removeFromCart, clearCart, submitOrder,
+    markAsPaid, updateOrderStatus, updateSettings, fetchStats, createBackup, previewBackup, restoreBackup, resetDemo,
+  };
   return (
     <StoreContext.Provider value={value}>
-      {children}
+      {ready ? children : (
+        <div className="min-h-dvh bg-zinc-950 p-6 text-center text-white flex flex-col items-center justify-center" role={storageError ? 'alert' : 'status'}>
+          <h1 className="text-xl font-bold">{storageError ? 'Local data could not be opened / 本机资料无法开启' : 'Opening CJ POS / 正在读取本机资料'}</h1>
+          {storageError && <p className="mt-3 max-w-md text-sm text-red-300">{storageError}</p>}
+        </div>
+      )}
     </StoreContext.Provider>
   );
 }
 
-// ==================== Hook ====================
 export function useStore(): StoreState {
-  const ctx = useContext(StoreContext);
-  if (!ctx) throw new Error('useStore must be used within <StoreProvider>');
-  return ctx;
+  const context = useContext(StoreContext);
+  if (!context) throw new Error('useStore must be used within <StoreProvider>');
+  return context;
 }
