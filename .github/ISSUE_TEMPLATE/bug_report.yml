@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a reproducible CJ POS problem using synthetic data.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "Do not attach real customer data, backups, receipt files, payment QR codes, private logs or signing material. Use made-up examples."
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Public web demo / PWA
+        - Android 0.1.4 test APK
+        - Local source build
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version and browser / Android version
+      placeholder: "0.1.4, Chrome 129 on Android 14"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Use only synthetic orders and menu data.
+      placeholder: "1. Open ...\n2. Choose ...\n3. Confirm ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Safe evidence
+      description: Optional sanitized screenshot or error text. Do not include real customer or shop details.

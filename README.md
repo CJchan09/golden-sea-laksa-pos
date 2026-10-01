@@ -1,51 +1,47 @@
-# CJ F&B POS — Public Test Build
+# CJ POS — 0.1.4 public test
 
-A mobile-first, local-first ordering, cashier, and kitchen workflow for small F&B businesses.
+CJ POS is a local-first ordering, cashier, kitchen and sales-reporting app for small food businesses. The interface supports English, Chinese and Malay. This repository contains the web/PWA source and an Android WebView test wrapper.
 
-## Try the public demo
+> 测试版：菜单、订单和照片保存在当前设备。不同设备之间不会自动同步。
 
-**Live URL:** https://pos.cj-chan.work/
+## Try it
 
-- Customer ordering: choose **Try sample store / 试用示范店**.
-- Menu editing: choose **Edit demo menu / 编辑菜单**. It opens directly without a password.
-- Staff History and Kitchen Display also open directly in the public demo.
+- [Public web demo](https://pos.cj-chan.work/) — start at the landing page, or open the [staff register](https://pos.cj-chan.work/#/cashier) directly.
+- [Customer demo](https://pos.cj-chan.work/#/menu?demo=1) — try the separate guest ordering flow without a shop's menu file.
+- [Android 0.1.4 test APK](https://pos.cj-chan.work/downloads/CJ_POS_0.1.4_Test.apk) — a debug-signed test package, not a Google Play release.
 
-Suggested test flow:
+The public web demo opens staff screens without a password and is for sample data. The Android APK is an on-device test build with the same open staff entrance. You can use it for your own shop data; it has no cloud sync, so save a private `.cjpos` backup.
 
-1. Open **Edit demo menu**, add a dish and create option groups such as Size, Rice type, Protein, or Add-ons. Every choice can have its own extra price. Then choose **Save on this device**.
-2. Return home, open the sample store, and submit a dine-in cash order using the item you added.
-3. Open the Staff console on the same phone. Use **Active** for payment and **Kitchen** for orders that are not served yet.
-4. Mark the order completed in Kitchen.
-5. Open **History**, confirm the total, and download the selected date range as a two-sheet Excel workbook.
-6. On supported Android browsers, choose **Install** when prompted. Reopen the installed test app after disconnecting the network.
+## Current workflows
 
-## Public test boundaries
+| Area | What it does |
+| --- | --- |
+| [Register](https://pos.cj-chan.work/#/cashier) | Add items and options, change quantities, choose dine-in or takeaway, then create an unpaid order or confirm a payment already received. |
+| [Edit menu](https://pos.cj-chan.work/#/cashier/edit) | Edit the shop name, prices, photos and option groups. Changes are saved on this device. |
+| [Payments](https://pos.cj-chan.work/#/cashier/active) and [Kitchen](https://pos.cj-chan.work/#/cashier/kitchen) | Collect and confirm payment separately from preparing and completing an order. A completed order can still be unpaid. |
+| [History](https://pos.cj-chan.work/#/cashier/history) | Review orders and export a four-sheet XLSX: Summary, Daily, Orders and Order Items. Receipts include only confirmed payments on non-cancelled orders. |
+| [Share menu](https://pos.cj-chan.work/#/cashier/share) | Create a `.cjmenu` snapshot and share its file manually, for example through WhatsApp. The menu file contains selected public menu information, not merchant orders or backups. |
+| [Guest menu](https://pos.cj-chan.work/#/menu) | Open a received `.cjmenu`, fill an order and return a `.cjorder` file or link manually. The guest reader uses its own local storage. |
+| [Receive order](https://pos.cj-chan.work/#/cashier/receive) | Preview a returned receipt, check it against the current local menu and confirm it into the merchant's orders as unpaid/Pending. Receiving it does not clear the register cart. |
 
-- This build stores test data in the current browser/device. It is not a cloud account.
-- Each browser/device profile gets one local copy. Tabs in the same browser share it; saving cannot change the published baseline or data on another device.
-- Different phones and computers do not automatically share orders.
-- The public demo intentionally bypasses the Staff, KDS, and History password gates. This is not production authentication.
-- Do not enter real customer data, bank QR codes, passwords, or business records.
-- Google Sheet sync is disabled in the public build.
-- The current deliverable is an installable Web/PWA test build with offline reopening. It is not yet the signed Google Play Android package.
-- The first visit and version updates need internet access. Default remote menu images are cached after they are viewed online.
+The WhatsApp flow uses files or links that people send themselves. The app does not automatically receive WhatsApp messages, synchronize orders between devices, confirm bank transfers or accept customer-provided payment status. Internet is needed to open the web app for the first time and to send through WhatsApp; an already loaded guest menu can be filled offline.
 
-To reset your test data, choose **Reset Demo / 恢复示范资料** on the landing page or menu editor. The reset only removes this product's demo data from the current device; it preserves passwords and unrelated browser data.
+## Local data and backups
 
-## Run locally
+Orders, settings, cart and photos are stored locally in IndexedDB. A `.cjpos` backup contains the full merchant dataset, including any order/customer details and photos. Keep backup files private. The web app can export a backup manually; the Android test app also supports local file export. Clearing browser/app data can remove local orders if no backup was saved.
 
-Prerequisite: Node.js 20 or newer.
+The public demo includes **Reset Demo**, which replaces CJ POS demo data on the current device. No cloud account or Google Sheet sync is used by the public build.
+
+## Run from source
+
+Requires Node.js 20 or newer.
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-Open `http://localhost:3000/`.
-
-Local development defaults to public demo mode. To verify the private/formal password gates, set `VITE_PUBLIC_DEMO="false"` before starting Vite.
-
-## Verify
+Open `http://localhost:3000/`. Development defaults to public demo mode. The GitHub Pages workflow builds with `VITE_PUBLIC_DEMO=true`; a local build can use `VITE_PUBLIC_DEMO=false` to exercise the existing staff gate. That gate is local UI access control, not production authentication. See `.env.example` for optional experimental variables. Every `VITE_*` value is exposed to browser code, so never put a secret there.
 
 ```bash
 npm run lint
@@ -53,4 +49,12 @@ npm test
 npm run build
 ```
 
-The GitHub Pages workflow builds from `main` for the root custom domain. The public deployment intentionally does not inject private API, Google Apps Script, or Google Sheet values.
+The web release is built by [the Pages workflow](.github/workflows/deploy.yml). Android native source and the exact safe publication scope are documented in [Android source publication](docs/open-source/android-source-publication.md). A published APK is a test binary and does not replace the native source or a reproducible release build.
+
+## Contribute
+
+Bug reports and improvements are welcome through [Issues](https://github.com/CJchan09/golden-sea-laksa-pos/issues) and pull requests. Read [CONTRIBUTING.md](CONTRIBUTING.md) before sharing logs, screenshots or sample files. Keep real merchant/customer data and signing material out of submissions.
+
+## License status
+
+This public repository does not yet have a repository-wide `LICENSE` file. Its owner is confirming the source and media licensing scope. `src/App.tsx` carries an existing Apache-2.0 file notice, and third-party dependencies retain their own licenses. See [licensing and asset notes](docs/open-source/THIRD_PARTY.md). Until a repository-wide license is published, do not assume that public visibility grants permission to reuse every file.

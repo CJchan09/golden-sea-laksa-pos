@@ -1,0 +1,22 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'work.cjchan.pos.test'
+    compileSdk 34
+    sourceSets {
+        main {
+            // Package only the freshly built web app; old copied assets cannot leak into the APK.
+            assets.srcDirs = ["../../dist-android"]
+        }
+    }
+    buildFeatures { buildConfig true }
+    defaultConfig {
+        applicationId 'work.cjchan.pos.test'
+        minSdk 26
+        targetSdk 34
+        versionCode 5
+        versionName '0.1.4-test'
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildTypes { debug { debuggable true } }
+}
+dependencies { implementation 'androidx.webkit:webkit:1.11.0' }
