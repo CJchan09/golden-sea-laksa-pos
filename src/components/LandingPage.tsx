@@ -1,9 +1,10 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowDownToLine, ArrowRight, ChefHat, Check, ChevronRight, ClipboardList, CreditCard, FileArchive, FileSpreadsheet, HardDrive, Languages, MonitorSmartphone, PlayCircle, Settings2, ShieldCheck, Smartphone, Store, Volume2 } from 'lucide-react';
 import { APP_ICON_SRC } from '../brand';
 import { IS_PUBLIC_DEMO } from '../demo-mode';
 import { useStore } from '../store';
 import { tr } from '../i18n';
+import type { Language } from '../types';
 import PublicDemoReset from './PublicDemoReset';
 import './LandingPage.css';
 
@@ -11,6 +12,7 @@ interface Props { onStart: () => void; onAdmin: () => void; onKitchen: () => voi
 const asset = (name: string) => import.meta.env.BASE_URL + 'assets/' + name;
 const media = (name: string) => import.meta.env.BASE_URL + 'media/' + name;
 const APK_URL = import.meta.env.BASE_URL + 'downloads/CJ_POS_0.1.4_Test.apk';
+type VideoState = { language: Language; status: 'loading' | 'ready' | 'error'; duration: number | null };
 
 // A food-business landing page, using the existing React/CSS and Lucide stack.
 // Light cream is a deliberate brand choice. Real screenshots remain unaltered.
@@ -18,27 +20,57 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
   const { language, changeLanguage } = useStore();
   const t = (en: string, zh: string, ms: string) => tr(language, en, zh, ms);
   const [activeStep, setActiveStep] = useState(0);
-  const [videoState, setVideoState] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [playbackNotice, setPlaybackNotice] = useState(false);
+  const [videoState, setVideoState] = useState<VideoState>({ language, status: 'loading', duration: null });
+  const [playbackNotice, setPlaybackNotice] = useState<Language | null>(null);
+  const [failedScreenshot, setFailedScreenshot] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const selectedLanguageRef = useRef(language);
+  selectedLanguageRef.current = language;
+  const hasNarration = language !== 'ms';
+  const currentVideoState = videoState.language === language ? videoState : { language, status: 'loading' as const, duration: null };
+  const narrationLabel = language === 'en' ? 'English narration' : language === 'zh' ? '华语配音' : 'Panduan bersari kata Bahasa Melayu · suara belum tersedia';
+  const playButtonLabel = { en: 'Play from start with sound', zh: '从头有声播放', ms: 'Main dari awal' }[language];
+  const videoDuration = currentVideoState.duration && Number.isFinite(currentVideoState.duration)
+    ? ` · ${Math.floor(currentVideoState.duration / 60)}:${String(Math.floor(currentVideoState.duration % 60)).padStart(2, '0')}` : '';
+  const mediaStatusLabel = currentVideoState.status === 'error'
+    ? t('English guide unavailable', '华语影片暂不可用', 'Panduan Bahasa Melayu tidak tersedia')
+    : currentVideoState.status === 'loading'
+      ? t('Loading English guide…', '正在加载华语影片…', 'Memuatkan panduan Bahasa Melayu…')
+      : narrationLabel + videoDuration;
+  useEffect(() => {
+    setVideoState({ language, status: 'loading', duration: null });
+    setPlaybackNotice(null);
+    const video = videoRef.current;
+    return () => { video?.pause(); };
+  }, [language]);
+  const setVideoResult = (videoLanguage: Language, status: VideoState['status'], duration: number | null = null) => {
+    if (selectedLanguageRef.current !== videoLanguage) return;
+    setVideoState({ language: videoLanguage, status, duration });
+  };
+  const selectLanguage = (nextLanguage: Language) => {
+    videoRef.current?.pause();
+    setVideoState({ language: nextLanguage, status: 'loading', duration: null });
+    setPlaybackNotice(null);
+    void changeLanguage(nextLanguage);
+  };
   const playGuide = async () => {
     const video = videoRef.current;
     if (!video) return;
-    setPlaybackNotice(false);
-    video.muted = false;
-    video.volume = 1;
-    video.currentTime = 0;
+    setPlaybackNotice(null);
+    video.muted = !hasNarration;
+    video.volume = hasNarration ? 1 : 0;
+    try { video.currentTime = 0; } catch { /* Metadata may not be loaded yet. */ }
     try {
       await video.play();
     } catch {
-      setPlaybackNotice(true);
+      if (videoRef.current === video && !video.error) setPlaybackNotice(language);
     }
   };
   const steps = [
     {
       title: t('Register', '收银点单', 'Daftar pesanan'),
       short: t('Build an order', '选商品、开订单', 'Bina pesanan'),
-      icon: Store, image: 'cj-pos-register-desktop.jpg',
+      icon: Store, image: 'cj-pos-register-desktop',
       heading: t('Take the order while you serve.', '边招呼客人，边把订单记好。', 'Ambil pesanan sambil melayan.'),
       body: t('Choose items, adjust quantities and options, then choose dine-in or takeaway. Collect payment now or send the order to the kitchen and collect later.', '点选商品，调整数量和选项，再选择堂食或外带。可以现在收款，也可以先送厨房、稍后收款。', 'Pilih item, kuantiti dan pilihan, kemudian makan di sini atau bungkus. Terima bayaran sekarang atau hantar ke dapur dan kutip kemudian.'),
       detail: t('Tax and takeaway fees are included in the amount shown before confirming.', '确认前显示的总额，已包含你设定的税费与打包费。', 'Jumlah sebelum pengesahan termasuk cukai dan caj bungkus yang ditetapkan.'),
@@ -46,7 +78,7 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
     {
       title: t('Edit', '编辑菜单', 'Sunting menu'),
       short: t('Make it your shop', '换成你自己的店', 'Jadikan kedai anda'),
-      icon: Settings2, image: 'cj-pos-edit.jpg',
+      icon: Settings2, image: 'cj-pos-edit',
       heading: t('Your shop name. Your own menu.', '店名、菜品，换成你自己的。', 'Nama kedai dan menu anda sendiri.'),
       body: t('Edit the shop name, prices, photos, serving sizes and add-ons. The same menu works for kuih, drinks, noodles and other food.', '修改店名、价格和照片，设置大小份、口味或加料。卖糕点、饮料、面食，都可以换成自己的菜单。', 'Ubah nama kedai, harga, foto, saiz hidangan dan tambahan. Gunakan menu yang sama untuk kuih, minuman, mi atau makanan lain.'),
       detail: t('Use English, Chinese or Malay names. Missing translations fall back to a name you entered.', '名称支持英文、华语和马来文；没填的语言，会显示你已填写的名称。', 'Nama menyokong Inggeris, Cina dan Melayu. Terjemahan kosong menggunakan nama yang sudah diisi.'),
@@ -54,7 +86,7 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
     {
       title: t('Customer View', '顾客模式', 'Paparan pelanggan'),
       short: t('Hand over the phone', '交给顾客选餐', 'Serahkan telefon'),
-      icon: Smartphone, image: 'cj-pos-customer.jpg',
+      icon: Smartphone, image: 'cj-pos-customer',
       heading: t('Let them choose. Then take over.', '让顾客自己选，再交回给你。', 'Pelanggan pilih, anda sambung.'),
       body: t('Hand this device to the customer. They choose items, review their order and submit it. The order summary asks them to return the phone to staff.', '把这台设备交给顾客。他可以选商品、检查订单，再提交。完成后，订单摘要会提示他把电话交还给店员。', 'Serahkan peranti ini kepada pelanggan. Mereka pilih item, semak dan hantar pesanan. Ringkasan meminta telefon dipulangkan kepada kakitangan.'),
       detail: t('One shared device. This version does not sync a second customer phone.', '目前使用同一台设备，不会同步另一位顾客的电话。', 'Satu peranti dikongsi. Versi ini tidak menyegerakkan telefon pelanggan kedua.'),
@@ -62,7 +94,7 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
     {
       title: t('Kitchen', '厨房备餐', 'Dapur'),
       short: t('Prepare and complete', '备餐、标记出餐', 'Sedia dan siapkan'),
-      icon: ChefHat, image: 'cj-pos-kitchen.jpg',
+      icon: ChefHat, image: 'cj-pos-kitchen',
       heading: t('Keep preparation moving.', '看清每一单，按顺序准备。', 'Susun penyediaan setiap pesanan.'),
       body: t('Both paid and unpaid orders appear in the kitchen. Read the order number and choices, prepare the food, and mark it ready.', '先付、后付的订单都会进入厨房。按订单号查看商品和选项，准备好后标记已出餐。', 'Pesanan berbayar dan belum berbayar muncul di dapur. Semak nombor dan pilihan, sediakan makanan, kemudian tandakan siap.'),
       detail: t('Ready does not mean paid. Unpaid orders remain available in Payments.', '已出餐不代表已付款。未付款订单仍留在收款页。', 'Siap tidak bermaksud dibayar. Pesanan belum dibayar kekal dalam Bayaran.'),
@@ -70,7 +102,7 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
     {
       title: t('Payments', '确认收款', 'Bayaran'),
       short: t('Confirm money received', '确认实际到账', 'Sahkan wang diterima'),
-      icon: CreditCard, image: 'cj-pos-payments.jpg',
+      icon: CreditCard, image: 'cj-pos-payments',
       heading: t('A clear place for unpaid orders.', '还有哪些没收钱，一眼看清。', 'Lihat pesanan yang belum dibayar.'),
       body: t('Open an unpaid order, choose Cash or QR, and confirm only after receiving the money. Orders already served stay visible until they are paid.', '打开未付款订单，选择现金或 QR，实际收到款后才确认。已经出餐但还没付钱的订单，也会继续显示。', 'Buka pesanan belum dibayar, pilih Tunai atau QR dan sahkan selepas wang diterima. Pesanan yang sudah siap kekal sehingga dibayar.'),
       detail: t('QR displays your payment image. It does not check your bank balance or confirm transfers automatically.', 'QR 只是显示你的收款码，不会读取银行余额或自动确认转账。', 'QR memaparkan kod bayaran anda. Ia tidak membaca baki bank atau mengesahkan pindahan secara automatik.'),
@@ -78,13 +110,14 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
     {
       title: t('History', '记录与报表', 'Sejarah'),
       short: t('Review and export', '看记录、导出报表', 'Semak dan eksport'),
-      icon: ClipboardList, image: 'cj-pos-history.jpg',
+      icon: ClipboardList, image: 'cj-pos-history',
       heading: t('Finish the day with a clear record.', '收工前，把今天的记录留好。', 'Simpan rekod yang jelas setiap hari.'),
       body: t('Review day, week, month or year. Export an Excel file with a summary, daily totals, orders and item details. Only confirmed, non-cancelled payments count as receipts.', '按日、周、月或年查看记录。导出 Excel，内含汇总、每日金额、订单和商品明细。营收只计算已确认收款且未取消的订单。', 'Semak hari, minggu, bulan atau tahun. Eksport Excel dengan ringkasan, jumlah harian, pesanan dan butiran item. Hanya bayaran disahkan yang tidak dibatalkan dikira.'),
       detail: t('Reports follow the date payment was received, using Malaysia time.', '报表按实际收款日期统计，使用马来西亚时间。', 'Laporan mengikut tarikh bayaran diterima, menggunakan waktu Malaysia.'),
     },
   ];
   const currentStep = steps[activeStep];
+  const screenshotName = `${currentStep.image}-${language}.jpg`;
   const openSelectedStep = () => {
     if (activeStep === 1) onAdmin();
     else if (activeStep === 2) onStart();
@@ -113,7 +146,7 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
       <label className="cj-language">
         <Languages size={18} aria-hidden="true" />
         <span className="cj-sr-only">{t('Language', '语言', 'Bahasa')}</span>
-        <select value={language} onChange={event => { void changeLanguage(event.target.value as 'en' | 'zh' | 'ms'); }}>
+        <select value={language} onChange={event => { selectLanguage(event.target.value as Language); }}>
           <option value="en">English</option><option value="zh">中文</option><option value="ms">Bahasa Melayu</option>
         </select>
       </label>
@@ -131,24 +164,24 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
           </div>
         </div>
         <figure id="guide" className="cj-hero-visual cj-hero-video" aria-labelledby="cj-guide-title">
-          <h2 id="cj-guide-title" className="cj-video-heading"><PlayCircle size={24} aria-hidden="true" />{t('A quick guide, with sound.', '先听介绍，再自己试。', 'Panduan ringkas dengan suara.')}</h2>
+          <h2 id="cj-guide-title" className="cj-video-heading"><PlayCircle size={24} aria-hidden="true" />{t('A quick guide, with sound.', '先听介绍，再自己试。', 'Panduan ringkas bersari kata.')}</h2>
           <div className="cj-video-wrap">
-            <video ref={videoRef} controls playsInline preload="metadata" poster={media('cj-pos-guide-poster.jpg')} onLoadedMetadata={() => setVideoState('ready')} onError={() => setVideoState('error')} aria-label={t('CJ POS guide with Chinese narration', 'CJ POS 华语有声教学', 'Panduan CJ POS dengan suara bahasa Cina')}>
-              <source src={media('cj-pos-guide-zh.mp4')} type="video/mp4" onError={() => setVideoState('error')} />
-              <track kind="captions" src={media('cj-pos-guide-zh.vtt')} srcLang="zh" label="中文" />
+            <video key={language} ref={videoRef} controls playsInline preload="metadata" poster={media(`cj-pos-guide-poster-${language}.jpg`)} onLoadedMetadata={event => setVideoResult(language, 'ready', event.currentTarget.duration)} onError={() => setVideoResult(language, 'error')} aria-label={t('CJ POS guide with English narration', 'CJ POS 华语有声教学', 'Panduan CJ POS bersari kata Bahasa Melayu, suara belum tersedia')}>
+              <source src={media(`cj-pos-guide-${language}.mp4`)} type="video/mp4" onError={() => setVideoResult(language, 'error')} />
+              <track kind="captions" src={media(`cj-pos-guide-${language}.vtt`)} srcLang={language} label={{ en: 'English', zh: '中文', ms: 'Bahasa Melayu' }[language]} />
               {t('Your browser cannot play this video.', '这个浏览器无法播放影片。', 'Pelayar anda tidak dapat memainkan video ini.')}
             </video>
-            {videoState === 'error' && <div className="cj-media-message" role="status">
-              <p>{t('The video could not load. You can follow the six steps below and try the app.', '影片暂时无法播放，你可以先参考下方六个步骤，直接试玩。', 'Video tidak dapat dimuatkan. Anda boleh ikuti enam langkah di bawah dan cuba aplikasi.')}</p>
-              <button type="button" onClick={() => { setVideoState('loading'); videoRef.current?.load(); }}>{t('Retry video', '重新加载影片', 'Cuba video semula')}</button>
+            {currentVideoState.status === 'error' && <div className="cj-media-message" role="status">
+              <p>{t('The English guide could not load. You can follow the six steps below and try the app.', '华语影片暂时无法播放，你可以先参考下方六个步骤，直接试玩。', 'Video panduan Bahasa Melayu tidak dapat dimuatkan. Ikuti enam langkah di bawah dan cuba aplikasi.')}</p>
+              <button type="button" onClick={() => { setVideoResult(language, 'loading'); videoRef.current?.load(); }}>{t('Retry video', '重新加载影片', 'Cuba video semula')}</button>
             </div>}
           </div>
           <div className="cj-video-actions">
-            <button type="button" className="cj-button cj-button-primary" onClick={() => { void playGuide(); }}><Volume2 size={19} aria-hidden="true" />{t('Play from start with sound', '从头有声播放', 'Main dari awal dengan suara')}</button>
-            <span>{t('Chinese narration · 1 min 11 sec', '华语配音 · 1 分 11 秒', 'Suara bahasa Cina · 1 min 11 saat')}</span>
+            <button type="button" className="cj-button cj-button-primary" onClick={() => { void playGuide(); }}>{hasNarration ? <Volume2 size={19} aria-hidden="true" /> : <PlayCircle size={19} aria-hidden="true" />}{playButtonLabel}</button>
+            <span>{mediaStatusLabel}</span>
           </div>
-          {playbackNotice && <p className="cj-media-message" role="status">{t('Press the player’s Play control to start the guide.', '请按播放器的播放按钮开始导览。', 'Tekan butang Main pada pemain untuk memulakan panduan.')}</p>}
-          <figcaption>{t('Basic workflow recorded in 0.1.3. See below for shared menus and WhatsApp orders in 0.1.4.', '基础操作录于 0.1.3；0.1.4 的菜单分享与 WhatsApp 接单，请看下方介绍。', 'Aliran asas dirakam dalam 0.1.3. Lihat penerangan di bawah untuk perkongsian menu dan pesanan WhatsApp dalam 0.1.4.')}</figcaption>
+          {playbackNotice === language && <p className="cj-media-message" role="status">{t('Press the player’s Play control to start the guide.', '请按播放器的播放按钮开始导览。', 'Tekan butang Main pada pemain untuk memulakan panduan.')}</p>}
+          <figcaption>{t('A guide to the core tasks. See below for shared menus and WhatsApp orders in 0.1.4.', '基础操作导览；0.1.4 的菜单分享与 WhatsApp 接单，请看下方介绍。', 'Panduan tugas asas. Lihat di bawah untuk perkongsian menu dan pesanan WhatsApp dalam 0.1.4.')}</figcaption>
         </figure>
       </section>
 
@@ -224,8 +257,10 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
           </div>
           <div id="cj-step-panel" className="cj-step-panel">
             <figure className="cj-app-preview">
-              <img key={currentStep.image} src={asset(currentStep.image)} alt={t('Actual app screenshot: ', '实际 App 截图：', 'Tangkapan skrin aplikasi sebenar: ') + currentStep.title} width="1440" height="900" loading="lazy" />
-              <figcaption>{t('Actual test version. Orders and amounts shown are demonstration data.', '实际测试版界面，图中的订单和金额均为示范资料。', 'Versi ujian sebenar. Pesanan dan jumlah yang dipaparkan ialah data demonstrasi.')}</figcaption>
+              {failedScreenshot === screenshotName
+                ? <div className="cj-screenshot-unavailable" role="status">{t('The English screenshot is unavailable. Open the app to view this screen.', '华语截图暂时无法加载，可直接打开 App 查看此界面。', 'Tangkapan skrin Bahasa Melayu tidak tersedia. Buka aplikasi untuk melihat skrin ini.')}</div>
+                : <img key={screenshotName} src={asset(screenshotName)} alt={t('Actual app screenshot: ', '实际 App 截图：', 'Tangkapan skrin aplikasi sebenar: ') + currentStep.title} width="1440" height="900" loading="lazy" onError={() => setFailedScreenshot(screenshotName)} />}
+              <figcaption>{failedScreenshot === screenshotName ? t('Screenshot unavailable in this language.', '此语种截图暂不可用。', 'Tangkapan skrin bahasa ini tidak tersedia.') : t('Actual test version. Orders and amounts shown are demonstration data.', '实际测试版界面，图中的订单和金额均为示范资料。', 'Versi ujian sebenar. Pesanan dan jumlah yang dipaparkan ialah data demonstrasi.')}</figcaption>
             </figure>
             <div className="cj-step-description" aria-live="polite">
               <h3>{currentStep.heading}</h3>
