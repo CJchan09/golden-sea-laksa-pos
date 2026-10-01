@@ -19,7 +19,21 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
   const t = (en: string, zh: string, ms: string) => tr(language, en, zh, ms);
   const [activeStep, setActiveStep] = useState(0);
   const [videoState, setVideoState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [playbackNotice, setPlaybackNotice] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const playGuide = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+    setPlaybackNotice(false);
+    video.muted = false;
+    video.volume = 1;
+    video.currentTime = 0;
+    try {
+      await video.play();
+    } catch {
+      setPlaybackNotice(true);
+    }
+  };
   const steps = [
     {
       title: t('Register', '收银点单', 'Daftar pesanan'),
@@ -116,10 +130,25 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
             <a className="cj-button cj-button-secondary" href={APK_URL} download="CJ_POS_0.1.4_Test.apk"><ArrowDownToLine size={19} aria-hidden="true" />{t('Download Android', '下载 Android', 'Muat turun Android')}</a>
           </div>
         </div>
-        <figure className="cj-hero-visual">
-          <img className="cj-market-photo" src={asset('cj-pos-market-hero.webp')} alt={t('A small food counter with kuih and takeaway food', '摆有糕点与外带食品的小店柜台场景', 'Kaunter makanan kecil dengan kuih dan makanan bungkus')} width="1440" height="1440" fetchPriority="high" />
-          <div className="cj-phone-proof"><img src={asset('cj-pos-register-phone.jpg')} alt={t('Actual CJ POS phone Register screen', 'CJ POS 实际手机收银台界面', 'Skrin Daftar CJ POS sebenar pada telefon')} width="412" height="915" /></div>
-          <figcaption>{t('Illustrative scene with an actual app screenshot.', '场景图仅作示意，手机界面为实际 App 截图。', 'Gambaran suasana dengan tangkapan skrin aplikasi sebenar.')}</figcaption>
+        <figure id="guide" className="cj-hero-visual cj-hero-video" aria-labelledby="cj-guide-title">
+          <h2 id="cj-guide-title" className="cj-video-heading"><PlayCircle size={24} aria-hidden="true" />{t('A quick guide, with sound.', '先听介绍，再自己试。', 'Panduan ringkas dengan suara.')}</h2>
+          <div className="cj-video-wrap">
+            <video ref={videoRef} controls playsInline preload="metadata" poster={media('cj-pos-guide-poster.jpg')} onLoadedMetadata={() => setVideoState('ready')} onError={() => setVideoState('error')} aria-label={t('CJ POS guide with Chinese narration', 'CJ POS 华语有声教学', 'Panduan CJ POS dengan suara bahasa Cina')}>
+              <source src={media('cj-pos-guide-zh.mp4')} type="video/mp4" onError={() => setVideoState('error')} />
+              <track kind="captions" src={media('cj-pos-guide-zh.vtt')} srcLang="zh" label="中文" />
+              {t('Your browser cannot play this video.', '这个浏览器无法播放影片。', 'Pelayar anda tidak dapat memainkan video ini.')}
+            </video>
+            {videoState === 'error' && <div className="cj-media-message" role="status">
+              <p>{t('The video could not load. You can follow the six steps below and try the app.', '影片暂时无法播放，你可以先参考下方六个步骤，直接试玩。', 'Video tidak dapat dimuatkan. Anda boleh ikuti enam langkah di bawah dan cuba aplikasi.')}</p>
+              <button type="button" onClick={() => { setVideoState('loading'); videoRef.current?.load(); }}>{t('Retry video', '重新加载影片', 'Cuba video semula')}</button>
+            </div>}
+          </div>
+          <div className="cj-video-actions">
+            <button type="button" className="cj-button cj-button-primary" onClick={() => { void playGuide(); }}><Volume2 size={19} aria-hidden="true" />{t('Play from start with sound', '从头有声播放', 'Main dari awal dengan suara')}</button>
+            <span>{t('Chinese narration · 1 min 11 sec', '华语配音 · 1 分 11 秒', 'Suara bahasa Cina · 1 min 11 saat')}</span>
+          </div>
+          {playbackNotice && <p className="cj-media-message" role="status">{t('Press the player’s Play control to start the guide.', '请按播放器的播放按钮开始导览。', 'Tekan butang Main pada pemain untuk memulakan panduan.')}</p>}
+          <figcaption>{t('Basic workflow recorded in 0.1.3. See below for shared menus and WhatsApp orders in 0.1.4.', '基础操作录于 0.1.3；0.1.4 的菜单分享与 WhatsApp 接单，请看下方介绍。', 'Aliran asas dirakam dalam 0.1.3. Lihat penerangan di bawah untuk perkongsian menu dan pesanan WhatsApp dalam 0.1.4.')}</figcaption>
         </figure>
       </section>
 
@@ -204,28 +233,6 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
               <p className="cj-step-note"><Check size={18} aria-hidden="true" />{currentStep.detail}</p>
               <button type="button" className="cj-text-link" onClick={openSelectedStep}>{t('Open this screen', '打开这个功能', 'Buka skrin ini')}<ArrowRight size={17} aria-hidden="true" /></button>
             </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="guide" className="cj-guide cj-section" aria-labelledby="cj-guide-title">
-        <div className="cj-shell cj-guide-layout">
-          <div className="cj-guide-copy">
-            <PlayCircle size={34} aria-hidden="true" />
-            <h2 id="cj-guide-title">{t('See it before you try it.', '先看一遍，再自己试。', 'Tonton dahulu, kemudian cuba.')}</h2>
-            <p>{t('Follow the Chinese-language walkthrough, from editing a menu to taking payment and keeping a backup.', '跟着华语教学，从修改菜单、点单和收款，一直看到报表与备份。', 'Ikuti panduan dalam bahasa Cina, daripada menyunting menu hingga bayaran, laporan dan sandaran.')}</p>
-            <p className="cj-video-language"><Volume2 size={18} aria-hidden="true" />{t('Chinese narration. Sound plays when you press play.', '华语配音，按播放后可开启声音。', 'Suara bahasa Cina. Bunyi dimainkan apabila anda tekan main.')}</p>
-          </div>
-          <div className="cj-video-wrap">
-            <video ref={videoRef} controls playsInline preload="metadata" poster={media('cj-pos-guide-poster.jpg')} onLoadedMetadata={() => setVideoState('ready')} onError={() => setVideoState('error')} aria-label={t('CJ POS guide with Chinese narration', 'CJ POS 华语有声教学', 'Panduan CJ POS dengan suara bahasa Cina')}>
-              <source src={media('cj-pos-guide-zh.mp4')} type="video/mp4" onError={() => setVideoState('error')} />
-              <track kind="captions" src={media('cj-pos-guide-zh.vtt')} srcLang="zh" label="中文" />
-              {t('Your browser cannot play this video.', '这个浏览器无法播放影片。', 'Pelayar anda tidak dapat memainkan video ini.')}
-            </video>
-            {videoState === 'error' && <div className="cj-media-message" role="status">
-              <p>{t('The video is not available yet. You can follow the six steps above and try the app.', '影片暂时无法播放，你可以先参考上方六个步骤，直接试玩。', 'Video belum tersedia. Anda boleh ikuti enam langkah di atas dan cuba aplikasi.')}</p>
-              <button type="button" onClick={() => { setVideoState('loading'); videoRef.current?.load(); }}>{t('Retry video', '重新加载影片', 'Cuba video semula')}</button>
-            </div>}
           </div>
         </div>
       </section>

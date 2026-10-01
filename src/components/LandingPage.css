@@ -55,6 +55,11 @@
 .cj-phone-proof { position: absolute; width: 26%; right: -10px; bottom: 52px; padding: 5px; background: #312620; border: 1px solid #6a5144; border-radius: 19px; box-shadow: 0 15px 35px #76543930; transform: rotate(5deg); }
 .cj-phone-proof img { display: block; width: 100%; height: auto; aspect-ratio: 412/915; object-fit: contain; border-radius: 14px; background: #18181b; }
 .cj-hero-visual figcaption { margin-top: 14px; color: var(--cj-muted); font-size: .8rem; text-align: right; line-height: 1.6; }
+.cj-hero-video { padding-right: 0; scroll-margin-top: 2rem; }
+.cj-hero-video .cj-video-heading { display: flex; align-items: center; gap: 10px; font-size: 1.2rem; line-height: 1.5; color: var(--cj-brand); margin-bottom: 16px; letter-spacing: -.02em; }
+.cj-video-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-top: 18px; }
+.cj-video-actions > span { color: var(--cj-muted); font-size: .85rem; }
+.cj-hero-video figcaption { text-align: left; }
 .cj-quick-facts { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px 30px; border-top: 1px solid var(--cj-line); border-bottom: 1px solid var(--cj-line); padding-block: 24px; }
 .cj-quick-facts span { display: flex; align-items: center; gap: 10px; font-size: .9rem; font-weight: 650; }
 .cj-quick-facts svg { color: var(--cj-brand); }
@@ -175,6 +180,7 @@
   .cj-hero-intro { margin-top: 20px !important; font-size: 1rem; line-height: 1.75; }
   .cj-hero .cj-actions { margin-top: 24px; }
   .cj-hero-visual { padding-right: 20px; }
+  .cj-hero-video { grid-row: 1; padding-right: 0; }
   .cj-market-photo { aspect-ratio: 1.32; }
   .cj-phone-proof { width: 23%; bottom: 40px; right: 0; border-radius: 14px; padding: 4px; }
   .cj-phone-proof img { border-radius: 10px; }
@@ -232,6 +238,7 @@
   .cj-actions { align-items: stretch; flex-direction: column; }
   .cj-button { width: 100%; padding-inline: 16px; }
   .cj-hero-visual { padding-right: 12px; }
+  .cj-hero-video { padding-right: 0; }
   .cj-step-controls { gap: 6px; }
   .cj-step-controls button { padding: 11px 8px; }
   .cj-step-number { display: none; }
