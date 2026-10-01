@@ -108,7 +108,7 @@ button:not(:disabled),
 @container (min-width: 53.125rem) { .register-menu-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (min-width: 1200px) {
   .register-layout { grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem); align-items: start; }
-  .register-cart { position: sticky; top: 6rem; max-height: calc(100dvh - 12rem); overflow-y: auto; }
+  .register-cart { position: sticky; top: calc(var(--pos-header-height, 5rem) + 1rem); max-height: calc(100dvh - var(--pos-header-height, 5rem) - var(--pos-nav-height, 5rem) - 2rem); overflow-y: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {

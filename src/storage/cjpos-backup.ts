@@ -1,6 +1,7 @@
 import type { Order, ShopSettings } from '../types';
 import type { LegacySnapshot, PosRead, PosState } from './pos-idb';
 import { materializeBackupPhotos, referencedPhotoKeys } from './pos-photos';
+import { v4 as uuidv4 } from 'uuid';
 
 export const CJPOS_BACKUP_VERSION = 1;
 const BACKUP_KIND = 'cjpos.full-backup';
@@ -75,6 +76,8 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
 
 function validateSettings(value: unknown): asserts value is ShopSettings {
   assert(isRecord(value), 'settings are missing');
+  assert(value.shopId === undefined || (typeof value.shopId === 'string' && value.shopId.length > 0), 'shop ID is invalid');
+  assert(value.whatsappNumber === undefined || typeof value.whatsappNumber === 'string', 'WhatsApp number is invalid');
   assert(typeof value.shopNameEn === 'string' && typeof value.shopNameZh === 'string', 'shop name is invalid');
   assert(typeof value.coverPhoto === 'string', 'cover photo reference is invalid');
   assert(value.qrImage === null || typeof value.qrImage === 'string', 'payment QR reference is invalid');
@@ -92,6 +95,20 @@ function validateSettings(value: unknown): asserts value is ShopSettings {
   }
   assert(typeof value.enableTax === 'boolean' && Number.isFinite(value.taxRate), 'tax settings are invalid');
   assert(Number.isFinite(value.takeawayFee), 'takeaway fee is invalid');
+  if (value.issuedMenus !== undefined) {
+    assert(Array.isArray(value.issuedMenus), 'issued menus are invalid');
+    const menuIds = new Set<string>();
+    for (const issued of value.issuedMenus) {
+      assert(isRecord(issued) && typeof issued.menuId === 'string' && issued.menuId.length > 0, 'issued menu ID is invalid');
+      assert(!menuIds.has(issued.menuId), 'issued menu IDs are duplicated');
+      menuIds.add(issued.menuId);
+      assert(typeof issued.createdAt === 'string' && Number.isFinite(Date.parse(issued.createdAt)), 'issued menu date is invalid');
+      validateSettings({ shopNameEn: '', shopNameZh: '', coverPhoto: '', qrImage: null,
+        menuItems: issued.menuItems, enableTax: issued.enableTax, taxRate: issued.taxRate,
+        takeawayFee: issued.takeawayFee });
+      assert((issued.menuItems as ShopSettings['menuItems']).every(item => item.image === ''), 'issued menus must not contain photos');
+    }
+  }
 }
 
 function validateOrder(value: unknown): asserts value is Order {
@@ -105,6 +122,14 @@ function validateOrder(value: unknown): asserts value is Order {
   assert(typeof value.paid === 'boolean', 'payment status is invalid');
   assert(value.paid_at === undefined || (typeof value.paid_at === 'string' && Number.isFinite(Date.parse(value.paid_at))), 'payment timestamp is invalid');
   assert(['Pending', 'Preparing', 'Completed', 'Cancelled'].includes(String(value.status)), 'order status is invalid');
+  if (value.customer !== undefined) {
+    assert(isRecord(value.customer), 'customer details are invalid');
+    assert(typeof value.customer.name === 'string' && typeof value.customer.phone === 'string' && typeof value.customer.address === 'string', 'customer details are invalid');
+    assert(value.customer.note === undefined || typeof value.customer.note === 'string', 'customer note is invalid');
+  }
+  for (const key of ['sourceRequestId', 'sourceFingerprint', 'sourceMenuId']) {
+    assert(value[key] === undefined || (typeof value[key] === 'string' && value[key].length > 0), 'order source is invalid');
+  }
 }
 
 export function validateBackupDocument(input: unknown): BackupDocument {
@@ -188,8 +213,10 @@ export function backupPreviewToRead(preview: BackupPreview, revision: number): P
   const document = validateBackupDocument(preview.document);
   const photos = new Map<string, Blob>();
   for (const photo of document.photos) photos.set(photo.key, base64ToBlob(photo.base64, photo.mimeType));
+  const state = structuredClone(document.state);
+  state.settings = { ...state.settings, shopId: state.settings.shopId || uuidv4() };
   return {
-    state: { ...structuredClone(document.state), revision: Math.max(revision, document.state.revision) + 1 },
+    state: { ...state, revision: Math.max(revision, document.state.revision) + 1 },
     photos,
     photoVersions: Object.fromEntries([...photos.keys()].map(key => [key, `${Date.now()}-${Math.random()}`])),
     legacySnapshot: document.legacySnapshot,

@@ -10,7 +10,7 @@ import './LandingPage.css';
 interface Props { onStart: () => void; onAdmin: () => void; onKitchen: () => void; }
 const asset = (name: string) => import.meta.env.BASE_URL + 'assets/' + name;
 const media = (name: string) => import.meta.env.BASE_URL + 'media/' + name;
-const APK_URL = import.meta.env.BASE_URL + 'downloads/CJ_POS_0.1.3_Test.apk';
+const APK_URL = import.meta.env.BASE_URL + 'downloads/CJ_POS_0.1.4_Test.apk';
 
 // A food-business landing page, using the existing React/CSS and Lucide stack.
 // Light cream is a deliberate brand choice. Real screenshots remain unaltered.
@@ -78,8 +78,8 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
     else window.location.hash = activeStep === 4 ? '#/cashier/active' : activeStep === 5 ? '#/cashier/history' : '#/cashier';
   };
   const faqs = [
-    [t('Is the app free?', '现在可以免费用吗？', 'Adakah aplikasi ini percuma?'), t('This 0.1.3 test version is free to try. The Android APK is a direct download and is not a Google Play release.', '0.1.3 测试版可以免费试用。Android APK 从这里直接下载，目前还未上架 Google Play。', 'Versi ujian 0.1.3 ini percuma untuk dicuba. APK Android dimuat turun terus dan belum diterbitkan di Google Play.')],
-    [t('Can two phones share the same orders?', '两台电话可以同时使用同一批订单吗？', 'Bolehkah dua telefon berkongsi pesanan?'), t('No. Each browser or installed app keeps its own records. For Customer View, pass the same device to the customer and take it back after the order.', '目前不可以。每个浏览器、每个已安装的 App 都各自保存资料。使用顾客模式时，把同一台设备交给顾客，点完单再拿回来。', 'Belum boleh. Setiap pelayar atau aplikasi menyimpan rekod sendiri. Untuk Paparan pelanggan, serahkan peranti yang sama dan ambil semula selepas pesanan.')],
+    [t('Is the app free?', '现在可以免费用吗？', 'Adakah aplikasi ini percuma?'), t('This 0.1.4 test version is free to try. The Android APK is a direct download and is not a Google Play release.', '0.1.4 测试版可以免费试用。Android APK 从这里直接下载，目前还未上架 Google Play。', 'Versi ujian 0.1.4 ini percuma untuk dicuba. APK Android dimuat turun terus dan belum diterbitkan di Google Play.')],
+    [t('Can customers order on their own phones?', '顾客可以用自己的电话点单吗？', 'Bolehkah pelanggan memesan pada telefon sendiri?'), t('Yes, using a menu shared by the seller. Customers send their order back through WhatsApp, then the seller imports and confirms it on the main device. Records do not sync automatically between phones.', '可以使用商家分享的菜单。顾客经 WhatsApp 把订单传回，商家再用主设备导入并确认。两台电话之间不会自动同步资料。', 'Boleh, dengan menu yang dikongsi penjual. Pelanggan menghantar pesanan melalui WhatsApp, kemudian penjual mengimport dan mengesahkannya pada peranti utama. Rekod tidak disegerakkan secara automatik antara telefon.')],
     [t('Can I combine the whole year?', '可以一次导出整年的记录吗？', 'Bolehkah saya eksport setahun sekali gus?'), t('Yes. Select Year in History to create one report from records still on that device. You do not need to merge daily Excel files by hand.', '可以。在记录页选「年」，就能把这台设备里仍保存的记录汇成一份报表，不必手动合并每天的 Excel。', 'Boleh. Pilih Tahun dalam Sejarah untuk satu laporan daripada rekod yang masih ada pada peranti. Tidak perlu menggabungkan fail harian secara manual.')],
     [t('Will daily reports save automatically?', '每天的报表会自动保存吗？', 'Adakah laporan harian disimpan automatik?'), t('On Android, choose a report folder and enable automatic reports. Saving runs while the app is open in the foreground. A closed app cannot guarantee a midnight export. Web reports are downloaded manually.', 'Android 版选择报表文件夹并启用后，会在 App 开着、位于前台时自动保存。关掉 App 后，不保证半夜自动导出；网页版使用手动下载。', 'Pada Android, pilih folder dan aktifkan laporan automatik. Simpanan berjalan apabila aplikasi terbuka di latar depan. Aplikasi tertutup tidak menjamin eksport tengah malam. Laporan web dimuat turun secara manual.')],
     [t('What happens if I change or lose my phone?', '换电话或电话坏了，资料怎么办？', 'Bagaimana jika saya tukar atau kehilangan telefon?'), t('Keep a full .cjpos backup outside the app. It can restore the shop on another device. Clearing browser or app data, or uninstalling the app, can remove local records.', '请定期把完整的 .cjpos 备份另外存好，之后可以在另一台设备还原。清除浏览器或 App 资料、卸载 App，都可能删除本机记录。', 'Simpan sandaran penuh .cjpos di luar aplikasi secara berkala. Ia boleh memulihkan kedai pada peranti lain. Memadam data pelayar atau aplikasi, atau menyahpasang aplikasi, boleh menghapuskan rekod tempatan.')],
@@ -113,7 +113,7 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
           <p className="cj-hero-intro">{t('A free app for orders, payments and daily records. Made for food stalls, cafés and kuih sellers.', '点单、收款、备餐和报表，一个免费 App。小摊、糕点店、小餐馆，都能换上自己的菜单。', 'Aplikasi percuma untuk pesanan, bayaran dan rekod harian. Untuk gerai, kafe dan penjual kuih.')}</p>
           <div className="cj-actions">
             <a className="cj-button cj-button-primary" href="#/cashier">{t('Try web demo', '试玩网页版', 'Cuba demo web')}<ArrowRight size={19} aria-hidden="true" /></a>
-            <a className="cj-button cj-button-secondary" href={APK_URL} download="CJ_POS_0.1.3_Test.apk"><ArrowDownToLine size={19} aria-hidden="true" />{t('Download Android', '下载 Android', 'Muat turun Android')}</a>
+            <a className="cj-button cj-button-secondary" href={APK_URL} download="CJ_POS_0.1.4_Test.apk"><ArrowDownToLine size={19} aria-hidden="true" />{t('Download Android', '下载 Android', 'Muat turun Android')}</a>
           </div>
         </div>
         <figure className="cj-hero-visual">
@@ -128,6 +128,54 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
         <span><Languages aria-hidden="true" size={19} />{t('English, Chinese & Malay', '英文、华语、马来文', 'Inggeris, Cina dan Melayu')}</span>
         <span><HardDrive aria-hidden="true" size={19} />{t('Records stay on your device', '资料保存在你的设备', 'Rekod pada peranti anda')}</span>
       </div>
+
+      <section className="cj-scenarios cj-section cj-shell" aria-labelledby="cj-scenarios-title">
+        <div className="cj-section-heading">
+          <h2 id="cj-scenarios-title">{t('At the stall. Or from home.', '现场摆摊，住家接单，都用得上。', 'Di gerai atau dari rumah.')}</h2>
+          <p>{t('Keep the main shop records on your device. Choose how customers place an order.', '门店的正式记录，留在你的主设备。顾客在现场或远端，都有适合的点单方式。', 'Simpan rekod utama kedai pada peranti anda. Pilih cara pelanggan membuat pesanan.')}</p>
+        </div>
+        <div className="cj-scenario-grid">
+          <article>
+            <figure>
+              <img src={asset('cj-pos-hawker-order-v014.webp')} width="1536" height="1024" loading="lazy" alt={t('Illustrative scene: a hawker takes an order on a phone at a Malaysian food stall', '情境示意：小贩在马来西亚摊位用电话为现场顾客点单', 'Gambaran: penjaja mengambil pesanan pada telefon di gerai Malaysia')} />
+              <figcaption>{t('AI-generated illustrative scene. Not a real customer testimonial.', 'AI 生成情境示意，非真实商家使用见证。', 'Gambaran dijana AI, bukan testimoni pelanggan sebenar.')}</figcaption>
+            </figure>
+            <h3>{t('Serve walk-in customers.', '小贩中心、路边摊，现场点单。', 'Layan pelanggan di gerai.')}</h3>
+            <p>{t('Take the order yourself, or hand over the same phone for Customer View. Check the items together, prepare the food and confirm payment.', '老板或服务员直接点单，也可以把同一台电话交给顾客自己选。一起核对商品，再备餐和确认收款。', 'Ambil pesanan sendiri atau serahkan telefon yang sama untuk Paparan pelanggan. Semak item bersama, sediakan makanan dan sahkan bayaran.')}</p>
+            <a className="cj-text-link" href="#/cashier">{t('Try web demo', '试玩网页版', 'Cuba demo web')}<ArrowRight size={17} aria-hidden="true" /></a>
+          </article>
+          <article>
+            <figure>
+              <img src={asset('cj-pos-home-kuih-v014.webp')} width="1536" height="1024" loading="lazy" alt={t('Illustrative scene: a home kuih seller checks a phone beside packed orders', '情境示意：住家糕点卖家在打包糕点旁查看电话订单', 'Gambaran: penjual kuih dari rumah menyemak telefon di sisi kuih yang dibungkus')} />
+              <figcaption>{t('AI-generated illustrative scene. Not a real customer testimonial.', 'AI 生成情境示意，非真实商家使用见证。', 'Gambaran dijana AI, bukan testimoni pelanggan sebenar.')}</figcaption>
+            </figure>
+            <h3>{t('Take kuih orders through WhatsApp.', '住家卖糕点，用 WhatsApp 接单。', 'Terima pesanan kuih melalui WhatsApp.')}</h3>
+            <p>{t('Share a menu for customers to open on their own phones. They return an order through WhatsApp. Review it on your main device before accepting it.', '分享菜单，让顾客在自己的电话选购，再经 WhatsApp 传回订单。你在主设备检查内容后，才正式接单。', 'Kongsi menu untuk pelanggan buka pada telefon sendiri. Mereka menghantar pesanan melalui WhatsApp. Semak pada peranti utama sebelum menerimanya.')}</p>
+            <a className="cj-text-link" href="#/menu?demo=1">{t('Try customer demo', '试玩顾客点单', 'Cuba demo pelanggan')}<ArrowRight size={17} aria-hidden="true" /></a>
+          </article>
+        </div>
+      </section>
+
+      <section id="shared-menu" className="cj-shared-flow cj-section" aria-labelledby="cj-shared-flow-title">
+        <div className="cj-shell">
+          <div className="cj-section-heading">
+            <h2 id="cj-shared-flow-title">{t('A menu out. An order back.', '菜单传出去，订单带回来。', 'Kongsi menu, terima pesanan.')}</h2>
+            <p>{t('Five steps connect the customer’s phone to your shop records. You decide which orders to accept.', '五个步骤，把顾客电话上的选择带回你的门店记录。每张订单都由你确认接收。', 'Lima langkah membawa pilihan pelanggan ke rekod kedai anda. Anda menentukan pesanan yang diterima.')}</p>
+          </div>
+          <ol className="cj-return-steps">
+            <li><h3>{t('Share your menu', '分享你的菜单', 'Kongsi menu')}</h3><p>{t('Prepare the menu on your main device and share it with your customer.', '在主设备整理菜单，再分享给顾客。', 'Sediakan menu pada peranti utama dan kongsi dengan pelanggan.')}</p></li>
+            <li><h3>{t('Customer chooses', '顾客打开并选购', 'Pelanggan memilih')}</h3><p>{t('The customer opens your shared menu, selects items and checks the total.', '顾客打开收到的菜单，选择商品并核对总额。', 'Pelanggan membuka menu, memilih item dan menyemak jumlah.')}</p></li>
+            <li><h3>{t('Return the order', 'WhatsApp 传回订单', 'Hantar pesanan')}</h3><p>{t('The customer sends the order back to you through WhatsApp.', '顾客经 WhatsApp 把订单传回给你。', 'Pelanggan menghantar pesanan kembali melalui WhatsApp.')}</p></li>
+            <li><h3>{t('Review and accept', '导入、检查并接单', 'Semak dan terima')}</h3><p>{t('Import it on your main device. Check the items and price before confirming.', '在主设备导入，核对商品和价格后再确认。', 'Import pada peranti utama. Semak item dan harga sebelum mengesahkan.')}</p></li>
+            <li><h3>{t('Prepare and collect', '备餐与确认收款', 'Sedia dan kutip bayaran')}</h3><p>{t('Prepare the accepted order. Mark it paid only after money is received.', '根据已接收的订单备餐，实际收到款后才标记付款。', 'Sediakan pesanan yang diterima. Tandakan dibayar selepas wang diterima.')}</p></li>
+          </ol>
+          <p className="cj-transfer-note"><ShieldCheck size={20} aria-hidden="true" />{t('WhatsApp carries the menu and order. It does not automatically sync your devices or confirm payment.', 'WhatsApp 用来传递菜单和订单，不会自动同步两台设备，也不会自动确认收款。', 'WhatsApp membawa menu dan pesanan. Ia tidak menyegerakkan peranti atau mengesahkan bayaran secara automatik.')}</p>
+          <div className="cj-actions">
+            <a className="cj-button cj-button-primary" href="#/menu?demo=1">{t('Try customer demo', '试玩顾客点单', 'Cuba demo pelanggan')}<ArrowRight size={18} aria-hidden="true" /></a>
+            <a className="cj-button cj-button-secondary" href="#/menu">{t('Open a shared menu', '打开收到的菜单', 'Buka menu dikongsi')}<ArrowRight size={18} aria-hidden="true" /></a>
+          </div>
+        </div>
+      </section>
 
       <section id="features" className="cj-features cj-section cj-shell" aria-labelledby="cj-features-title">
         <div className="cj-section-heading">
@@ -225,13 +273,13 @@ export default function LandingPage({ onStart, onAdmin, onKitchen }: Props) {
       <section className="cj-get-started cj-shell" aria-labelledby="cj-start-title">
         <MonitorSmartphone size={38} aria-hidden="true" />
         <div><h2 id="cj-start-title">{t('Try one order with your own menu.', '换上自己的菜单，试着开一单。', 'Cuba satu pesanan dengan menu anda.')}</h2><p>{t('Start in your browser, or download the free Android test app.', '先在浏览器试用，或下载免费的 Android 测试版。', 'Mula dalam pelayar atau muat turun aplikasi ujian Android percuma.')}</p></div>
-        <div className="cj-actions"><a className="cj-button cj-button-primary" href="#/cashier">{t('Try web demo', '试玩网页版', 'Cuba demo web')}<ArrowRight size={18} aria-hidden="true" /></a><a className="cj-button cj-button-secondary" href={APK_URL} download="CJ_POS_0.1.3_Test.apk"><ArrowDownToLine size={18} aria-hidden="true" />{t('Download Android', '下载 Android', 'Muat turun Android')}</a></div>
+        <div className="cj-actions"><a className="cj-button cj-button-primary" href="#/cashier">{t('Try web demo', '试玩网页版', 'Cuba demo web')}<ArrowRight size={18} aria-hidden="true" /></a><a className="cj-button cj-button-secondary" href={APK_URL} download="CJ_POS_0.1.4_Test.apk"><ArrowDownToLine size={18} aria-hidden="true" />{t('Download Android', '下载 Android', 'Muat turun Android')}</a></div>
       </section>
     </main>
 
     <footer className="cj-footer cj-shell">
       <div className="cj-footer-brand"><img src={APP_ICON_SRC} alt="" width="36" height="36" /><strong>CJ POS</strong></div>
-      <p>{t('Free test version 0.1.3. For one device. Not yet on Google Play.', '免费测试版 0.1.3，适用于单台设备，目前未上架 Google Play。', 'Versi ujian percuma 0.1.3. Untuk satu peranti. Belum di Google Play.')}</p>
+      <p>{t('Free test version 0.1.4. Shop records stay on your main device. Not yet on Google Play.', '免费测试版 0.1.4，门店记录保存在主设备，目前未上架 Google Play。', 'Versi ujian percuma 0.1.4. Rekod kedai pada peranti utama. Belum di Google Play.')}</p>
       {IS_PUBLIC_DEMO && <details className="cj-demo-tools"><summary>{t('Demo data tools', '示范资料管理', 'Alat data demo')}</summary><PublicDemoReset buttonClassName="cj-reset-button" /></details>}
     </footer>
   </div>;

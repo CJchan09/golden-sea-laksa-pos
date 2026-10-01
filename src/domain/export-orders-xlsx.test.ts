@@ -77,6 +77,24 @@ describe('buildOrderWorkbookSheets', () => {
     expect(sheets[3].data[1][5]).toMatchObject({value: 'Protein: +Beef', type: String});
   });
 
+  it('exports incoming customer fields as text without changing receipt amount columns', () => {
+    const imported: Order = { ...order, customer: {
+      name: '=Customer', phone: '+60123456789', address: '@Street', note: '-No cutlery',
+    }, sourceRequestId: 'request-1' };
+    const row = buildOrderWorkbookSheets([imported], settings)[2].data[1];
+    expect(row[10]).toMatchObject({ value: 20, type: Number });
+    expect(row.slice(19, 24)).toMatchObject([
+      { value: '=Customer', type: String }, { value: '+60123456789', type: String },
+      { value: '@Street', type: String }, { value: '-No cutlery', type: String },
+      { value: 'request-1', type: String },
+    ]);
+    const itemRow = buildOrderWorkbookSheets([imported], settings)[3].data[1];
+    expect(itemRow.slice(12, 16)).toMatchObject([
+      { value: '=Customer', type: String }, { value: '+60123456789', type: String },
+      { value: '@Street', type: String }, { value: '-No cutlery', type: String },
+    ]);
+  });
+
   it.each(['=formula', '+formula', '-formula', '@formula', '\tformula', '\rformula'])(
     'keeps formula-like workbook text typed as String: %j',
     (value) => {

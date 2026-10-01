@@ -100,6 +100,11 @@ export default function CashierHistory() {
         return <article key={order.local_order_id} className="min-w-0 space-y-2 rounded-xl border border-zinc-700 bg-zinc-900 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2"><strong>#{order.order_id}</strong><span className="text-sm text-zinc-400">{orderStatusLabel(language, order.status)} · {paymentLabel(language, order.paid ? order.payment_method : undefined)}</span></div>
           <p className="break-words text-sm">{summary}</p>
+          {order.customer && <div className="space-y-1 rounded-lg bg-zinc-800/70 p-3 text-sm">
+            <p className="break-words font-semibold">{t('Customer','顾客','Pelanggan')}: {order.customer.name} · {order.customer.phone}</p>
+            <p className="break-words">{t('Address','地址','Alamat')}: {order.customer.address}</p>
+            {order.customer.note && <p className="break-words">{t('Note','备注','Nota')}: {order.customer.note}</p>}
+          </div>}
           <div className="flex flex-wrap items-end justify-between gap-2 text-sm">
             <div className="space-y-1 text-zinc-400"><p>{t('Ordered: ', '下单：', 'Dipesan: ')}{order.timestamp}</p>{order.paid && <p>{t('Received: ', '收款：', 'Diterima: ')}{order.paid_at ? new Date(order.paid_at).toLocaleString(language === 'zh' ? 'zh-MY' : language === 'ms' ? 'ms-MY' : 'en-MY', {timeZone: 'Asia/Kuala_Lumpur'}) : t('Time unknown (legacy)', '时间未知（旧记录）', 'Masa tidak diketahui (lama)')}</p>}</div>
             <div className="text-right"><strong className="text-lg tabular-nums">{formatCurrency(order.total_amount)}</strong><p className={counted ? 'text-green-400' : 'text-zinc-400'}>{counted ? t('Included in receipts', '计入本期实收', 'Termasuk terimaan') : t('Not included in receipts', '不计入本期实收', 'Tidak termasuk terimaan')}</p></div>

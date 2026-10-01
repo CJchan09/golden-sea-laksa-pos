@@ -198,6 +198,12 @@ export default function KitchenDisplay({embedded = false, onGoToPayments}: Props
                 </div>
               </div>
 
+              {order.customer && <div className="space-y-1 border-b border-zinc-800 bg-zinc-800/40 px-5 py-3 text-sm text-zinc-100">
+                <p className="break-words font-bold">{tr(language,'Customer','顾客','Pelanggan')}: {order.customer.name} · {order.customer.phone}</p>
+                <p className="break-words">{tr(language,'Address','地址','Alamat')}: {order.customer.address}</p>
+                {order.customer.note && <p className="break-words font-semibold text-amber-300">{tr(language,'Note','备注','Nota')}: {order.customer.note}</p>}
+              </div>}
+
               {/* Items List */}
               <div className="p-5 flex-1">
                 {order.items && order.items.length > 0 ? (

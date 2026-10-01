@@ -16,6 +16,7 @@ import AdminLogin from './components/AdminLogin';
 import { StoreProvider, useStore } from './store';
 import { tr } from './i18n';
 import { IS_PUBLIC_DEMO } from './demo-mode';
+import GuestMenu from './components/GuestMenu';
 
 type Route = 'landing' | 'order' | 'checkout' | 'receipt' | 'cashier' | 'kitchen';
 const IS_ANDROID_APP = import.meta.env.VITE_ANDROID_APP === 'true';
@@ -31,6 +32,23 @@ function getRouteFromHash(): Route {
 }
 
 export default function App() {
+  const routeIsGuest = () => window.location.hash.startsWith('#/menu') || (window.location.pathname.startsWith('/menu') && !window.location.hash.startsWith('#/'));
+  const [guest, setGuest] = useState(routeIsGuest);
+  useEffect(() => {
+    const change = () => setGuest(routeIsGuest());
+    window.addEventListener('hashchange', change); return () => window.removeEventListener('hashchange', change);
+  }, []);
+  // The offline reader has its own database and never mounts the POS provider.
+  if (guest) return <GuestMenu />;
+  return <MerchantApp />;
+}
+
+function MerchantApp() {
+  // A service worker can serve index.html directly for this static entry path.
+  if (/^\/receive\/?$/.test(window.location.pathname) && !window.location.hash.startsWith('#/')) {
+    const payload = window.location.hash.slice(1);
+    window.history.replaceState(null, '', `/#/cashier/receive?payload=${encodeURIComponent(payload)}`);
+  }
   return <StoreProvider><AutoDailyExport /><AppRoutes />{!IS_ANDROID_APP && <PwaStatus />}</StoreProvider>;
 }
 

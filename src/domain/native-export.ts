@@ -6,8 +6,14 @@ const CHUNK_BYTES = 96 * 1024;
 export const MAX_NATIVE_FILE_BYTES = 256 * 1024 * 1024;
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 export const BACKUP_MIME = 'application/vnd.cjpos.backup+json';
+export const MENU_MIME = 'application/vnd.cjpos.menu+json';
+export const ORDER_MIME = 'application/vnd.cjpos.order+json';
+export const MAX_MENU_FILE_BYTES = 10 * 1024 * 1024;
+export const MAX_ORDER_FILE_BYTES = 256 * 1024;
+// Kept as a conservative order limit for existing callers.
+export const MAX_SHARED_FILE_BYTES = MAX_ORDER_FILE_BYTES;
 type NativeBridge = {postMessage(message: string): void; onmessage: ((event: {data: string}) => void) | null};
-interface NativeReply {id: string; ok: boolean; code?: string; error?: string; enabled?: boolean; folder?: string; key?: string; since?: string; uri?: string; exists?: boolean}
+interface NativeReply {id: string; ok: boolean; code?: string; error?: string; enabled?: boolean; folder?: string; key?: string; since?: string; uri?: string; exists?: boolean; sharesheetOpened?: boolean}
 export interface FolderStatus {enabled: boolean; folder: string; key: string; since: string}
 export class FileSaveError extends Error {
   constructor(public code: string, message = code) {super(message); this.name = 'FileSaveError';}
@@ -58,7 +64,9 @@ export async function reportFileExists(uri: string): Promise<boolean> {
 }
 export interface SaveFileOptions {automatic?: boolean; day?: string; revision?: string}
 export interface FileSaveResult {destination: 'native' | 'browser'; uri?: string}
+export interface FileShareResult {sharesheetOpened: boolean; downloaded?: boolean; cancelled?: boolean}
 export async function saveFile(blob: Blob, filename: string, mime: string, language: Language = 'en', options: SaveFileOptions = {}): Promise<FileSaveResult> {
+  if ((mime === MENU_MIME && blob.size > MAX_MENU_FILE_BYTES) || (mime === ORDER_MIME && blob.size > MAX_ORDER_FILE_BYTES)) throw new FileSaveError('TOO_LARGE');
   if (!isNativeApp()) {
     if (options.automatic) throw new FileSaveError('NATIVE_ONLY');
     const url = URL.createObjectURL(blob);
@@ -71,9 +79,15 @@ export async function saveFile(blob: Blob, filename: string, mime: string, langu
   return saveNativeFile(blob, filename, mime, language, options);
 }
 export async function saveNativeFile(blob: Blob, filename: string, mime: string, language: Language = 'en', options: SaveFileOptions = {}): Promise<FileSaveResult> {
+  const reply = await transferNativeFile(blob, filename, mime, language, options);
+  return {destination: 'native', uri: reply.uri};
+}
+async function transferNativeFile(blob: Blob, filename: string, mime: string, language: Language, options: SaveFileOptions, shareText?: string): Promise<NativeReply> {
   if (blob.size > MAX_NATIVE_FILE_BYTES) throw new FileSaveError('TOO_LARGE');
+  if ((mime === MENU_MIME && blob.size > MAX_MENU_FILE_BYTES) || (mime === ORDER_MIME && blob.size > MAX_ORDER_FILE_BYTES)) throw new FileSaveError('TOO_LARGE');
   const transfer = 'file-' + Date.now() + '-' + (++sequence);
-  await bridgeRequest({type: 'file-begin', transfer, filename, mime, size: blob.size, language, ...options});
+  await bridgeRequest({type: 'file-begin', transfer, filename, mime, size: blob.size, language, ...options,
+    ...(shareText !== undefined ? {share: true, text: shareText} : {})});
   try {
     for (let offset = 0; offset < blob.size; offset += CHUNK_BYTES) {
       const bytes = new Uint8Array(await blob.slice(offset, offset + CHUNK_BYTES).arrayBuffer());
@@ -81,12 +95,37 @@ export async function saveNativeFile(blob: Blob, filename: string, mime: string,
       for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
       await bridgeRequest({type: 'file-chunk', transfer, offset, base64: btoa(binary)});
     }
-    const reply = await bridgeRequest({type: 'file-finish', transfer}, options.automatic ? 60_000 : 10 * 60_000);
-    return {destination: 'native', uri: reply.uri};
+    return await bridgeRequest({type: 'file-finish', transfer}, options.automatic || shareText !== undefined ? 60_000 : 10 * 60_000);
   } catch (error) {
     await bridgeRequest({type: 'file-abort', transfer}, 5000).catch(() => {});
     throw error;
   }
+}
+/** Call from a user's button press. Opening a share sheet does not mean delivery. */
+export async function shareFile(blob: Blob, filename: string, mime: string, language: Language = 'en', text = ''): Promise<FileShareResult> {
+  if (![MENU_MIME, ORDER_MIME].includes(mime)) throw new FileSaveError('INVALID_REQUEST');
+  if ((mime === MENU_MIME && blob.size > MAX_MENU_FILE_BYTES) || (mime === ORDER_MIME && blob.size > MAX_ORDER_FILE_BYTES)) throw new FileSaveError('TOO_LARGE');
+  if (text.length > 65_536) throw new FileSaveError('INVALID_REQUEST');
+  if (isNativeApp()) {
+    const reply = await transferNativeFile(blob, filename, mime, language, {}, text);
+    return {sharesheetOpened: reply.sharesheetOpened === true};
+  }
+  // Keep the native share call before any await so browser user activation is retained.
+  const file = new File([blob], filename, {type: mime});
+  let canShare = false;
+  try {canShare = typeof navigator !== 'undefined' && !!navigator.share && !!navigator.canShare?.({files: [file]});}
+  catch { /* Some embedded browsers reject unsupported file shares. */ }
+  if (canShare) {
+    try {
+      await navigator.share({files: [file], ...(text ? {text} : {})});
+      return {sharesheetOpened: true};
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return {sharesheetOpened: false, cancelled: true};
+      // Unsupported formats and browsers still offer an explicit document download.
+    }
+  }
+  await saveFile(blob, filename, mime, language);
+  return {sharesheetOpened: false, downloaded: true};
 }
 export async function saveAndroidWorkbook(blob: Blob, filename: string): Promise<void> {
   await saveNativeFile(blob, filename, XLSX_MIME);

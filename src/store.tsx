@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import type { CartItem, Language, Order, OrderType, PaymentMethod, SalesStats, ShopSettings } from './types';
+import type { CartItem, IssuedMenuRecord, Language, Order, OrderType, PaymentMethod, SalesStats, ShopSettings } from './types';
 import { GAS_URL } from './constants';
 import { createDemoBaselineSettings } from './demo-baseline';
 import { IS_PUBLIC_DEMO } from './demo-mode';
@@ -9,8 +9,10 @@ import { ALL_LEGACY_KEYS } from './data/migrations/legacy-keys';
 import { IndexedDbPosRepository, type PosRead } from './storage/pos-idb';
 import { PhotoUrlRegistry, prepareSettingsPhotos } from './storage/pos-photos';
 import { backupPreviewToRead, createCjposBackup, previewCjposBackup, type BackupPreview } from './storage/cjpos-backup';
-import { addCartItemMutation, changeLanguageMutation, clearCartMutation, createOrderMutation, markPaidMutation, removeCartItemMutation, updateCartItemMutation, updateStatusMutation } from './storage/pos-operations';
+import { acceptIncomingOrderMutation, addCartItemMutation, changeLanguageMutation, clearCartMutation, createOrderMutation, markPaidMutation, removeCartItemMutation, updateCartItemMutation, updateStatusMutation, type IncomingOrderResult } from './storage/pos-operations';
 import { migrateLegacySnapshot, normalizeSettings, readLegacySnapshot, renameLegacyDemoSettings } from './storage/pos-legacy';
+import { normalizeWhatsAppNumber, SharingError, type OrderRequest } from './sharing/protocol';
+import { tr } from './i18n';
 
 const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(ACTIVE_DEMO_SYNC_CHANNEL_NAME) : null;
 const USE_EXPERIMENTAL_GAS = Boolean(GAS_URL) && !IS_PUBLIC_DEMO && import.meta.env.VITE_ANDROID_APP !== 'true';
@@ -52,6 +54,9 @@ export interface StoreState {
   markAsPaid: (localOrderId: string, paymentMethod: PaymentMethod) => Promise<boolean>;
   updateOrderStatus: (localOrderId: string, status: 'Preparing' | 'Completed' | 'Cancelled') => Promise<boolean>;
   updateSettings: (settings: ShopSettings) => Promise<boolean>;
+  ensureShopIdentity: () => Promise<string | null>;
+  recordIssuedMenu: (record: IssuedMenuRecord, whatsappNumber: string) => Promise<boolean>;
+  acceptIncomingOrder: (request: OrderRequest, expectedTotalSen: number, expectedMenuRevision?: string) => Promise<IncomingOrderResult | null>;
   fetchStats: (from: string, to: string) => Promise<SalesStats | null>;
   createBackup: () => Promise<Blob>;
   previewBackup: (file: Blob) => Promise<BackupPreview>;
@@ -94,14 +99,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const ensureReady = useCallback((): Promise<PosRead> => {
     if (!initRef.current) initRef.current = (async () => {
       const existing = await repositoryRef.current.read();
-      if (existing && renameLegacyDemoSettings(existing.state.settings, IS_PUBLIC_DEMO || import.meta.env.VITE_ANDROID_APP === 'true') !== existing.state.settings) {
-        await repositoryRef.current.mutate(current => ({ state: { ...current,
-          settings: renameLegacyDemoSettings(current.settings, true), revision: current.revision + 1 }, value: true }));
-        const renamed = await repositoryRef.current.read();
-        if (!renamed) throw new Error('Saved shop could not be reopened.');
-        return renamed;
+      if (existing) {
+        const shouldRename = IS_PUBLIC_DEMO || import.meta.env.VITE_ANDROID_APP === 'true';
+        if (!existing.state.settings.shopId || renameLegacyDemoSettings(existing.state.settings, shouldRename) !== existing.state.settings) {
+          await repositoryRef.current.mutate(current => {
+            const renamed = renameLegacyDemoSettings(current.settings, shouldRename);
+            if (renamed === current.settings && current.settings.shopId) return { state: current, value: true, changed: false };
+            return { state: { ...current, settings: { ...renamed, shopId: renamed.shopId || uuidv4() } }, value: true };
+          });
+          const migrated = await repositoryRef.current.read();
+          if (!migrated) throw new Error('Saved shop could not be reopened.');
+          return migrated;
+        }
+        return existing;
       }
-      return existing ?? repositoryRef.current.initialize(await migrateLegacySnapshot(readLegacySnapshot(localStorage)));
+      const migrated = await migrateLegacySnapshot(readLegacySnapshot(localStorage));
+      migrated.state.settings = { ...migrated.state.settings, shopId: migrated.state.settings.shopId || uuidv4() };
+      return repositoryRef.current.initialize(migrated);
     })();
     return initRef.current;
   }, []);
@@ -137,7 +151,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return read;
   }, [publish]);
 
-  const queuedWrite = useCallback(<T,>(work: () => Promise<T>, fallback: T, broadcast = true): Promise<T> => {
+  const queuedWrite = useCallback(<T,>(work: () => Promise<T>, fallback: T, broadcast = true, rethrow = false): Promise<T> => {
     pendingWritesRef.current += 1;
     setSaveStatus('saving');
     const operation = queueRef.current.then(async () => {
@@ -155,14 +169,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       return result;
     }).catch(error => {
-      setStorageError(storageMessage(error));
-      setSaveStatus('error');
+      if (!(error instanceof SharingError)) {
+        setStorageError(storageMessage(error));
+        setSaveStatus('error');
+      }
+      if (rethrow) throw error;
       return fallback;
     }).finally(() => {
       pendingWritesRef.current -= 1;
       if (pendingWritesRef.current === 0) setSaveStatus(current => current === 'error' ? current : 'saved');
     });
-    queueRef.current = operation.then(() => undefined);
+    queueRef.current = operation.then(() => undefined, () => undefined);
     return operation;
   }, [ensureReady, reloadAfterCommit]);
 
@@ -251,9 +268,43 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!current) throw new Error('Local data is not ready.');
     const normalized = normalizeSettings(input, createDemoBaselineSettings(), IS_PUBLIC_DEMO || import.meta.env.VITE_ANDROID_APP === 'true');
     const prepared = await prepareSettingsPhotos(normalized, photoRegistryRef.current, current.photos);
-    const result = await repositoryRef.current.mutate(state => ({ state: { ...state, settings: prepared.settings }, value: true }), prepared.photos);
+    const result = await repositoryRef.current.mutate(state => ({ state: { ...state, settings: {
+      ...prepared.settings,
+      shopId: state.settings.shopId || uuidv4(),
+      issuedMenus: state.settings.issuedMenus,
+      whatsappNumber: input.whatsappNumber ?? state.settings.whatsappNumber,
+    } }, value: true }), prepared.photos);
     return result?.value ?? false;
   }, false), [queuedWrite]);
+
+  const ensureShopIdentity = useCallback(async (): Promise<string | null> => {
+    await ensureReady();
+    await queueRef.current;
+    const read = await repositoryRef.current.read();
+    return read?.state.settings.shopId ?? null;
+  }, [ensureReady]);
+
+  const recordIssuedMenu = useCallback((input: IssuedMenuRecord, whatsappNumber: string) => queuedWrite(async () => {
+    const phone = normalizeWhatsAppNumber(whatsappNumber);
+    const record = structuredClone(input);
+    if (!record.menuId || !record.menuItems.length || !Number.isFinite(Date.parse(record.createdAt))) throw new SharingError('INVALID_FILE');
+    record.menuItems = record.menuItems.map(item => ({ ...item, image: '' }));
+    const result = await repositoryRef.current.mutate(current => {
+      const old = current.settings.issuedMenus?.find(item => item.menuId === record.menuId);
+      if (old && JSON.stringify(old) !== JSON.stringify(record)) throw new SharingError('MENU_ID_CONFLICT');
+      const issuedMenus = old ? current.settings.issuedMenus : [...(current.settings.issuedMenus ?? []), record];
+      if (old && current.settings.whatsappNumber === phone) return { state: current, value: true, changed: false };
+      return { state: { ...current, settings: { ...current.settings,
+        shopId: current.settings.shopId || uuidv4(), whatsappNumber: phone, issuedMenus,
+      } }, value: true };
+    });
+    return result?.value ?? false;
+  }, false, true, true), [queuedWrite]);
+
+  const acceptIncomingOrder = useCallback((request: OrderRequest, expectedTotalSen: number, expectedMenuRevision?: string) => queuedWrite(async () => {
+    const result = await repositoryRef.current.mutate(current => acceptIncomingOrderMutation(current, request, expectedTotalSen, new Date(), uuidv4(), expectedMenuRevision));
+    return result?.value ?? null;
+  }, null, true, true), [queuedWrite]);
 
   const fetchStats = useCallback(async (from: string, to: string): Promise<SalesStats | null> => {
     const result = await gasGet({ action: 'getStats', from, to });
@@ -281,7 +332,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const current = await repositoryRef.current.read();
     const prepared = await prepareSettingsPhotos(createDemoBaselineSettings(), null, new Map(), false);
     await repositoryRef.current.reset({
-      state: { orders: [], cart: [], settings: prepared.settings, language: 'en', revision: (current?.state.revision ?? 0) + 1 },
+      state: { orders: [], cart: [], settings: { ...prepared.settings, shopId: uuidv4() }, language: 'en', revision: (current?.state.revision ?? 0) + 1 },
       photos: prepared.photos,
       photoVersions: Object.fromEntries([...prepared.photos.keys()].map(key => [key, uuidv4()])),
       legacySnapshot: current?.legacySnapshot ?? readLegacySnapshot(localStorage),
@@ -295,13 +346,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value: StoreState = {
     orders, cart, language, isOnline, isSyncing: false, ready, revision, saveStatus, storageError, settings,
     changeLanguage, addToCart, updateCartItem, removeFromCart, clearCart, submitOrder,
-    markAsPaid, updateOrderStatus, updateSettings, fetchStats, createBackup, previewBackup, restoreBackup, resetDemo,
+    markAsPaid, updateOrderStatus, updateSettings, ensureShopIdentity, recordIssuedMenu, acceptIncomingOrder,
+    fetchStats, createBackup, previewBackup, restoreBackup, resetDemo,
   };
   return (
     <StoreContext.Provider value={value}>
       {ready ? children : (
         <div className="min-h-dvh bg-zinc-950 p-6 text-center text-white flex flex-col items-center justify-center" role={storageError ? 'alert' : 'status'}>
-          <h1 className="text-xl font-bold">{storageError ? 'Local data could not be opened / 本机资料无法开启' : 'Opening CJ POS / 正在读取本机资料'}</h1>
+          <h1 className="text-xl font-bold">{storageError
+            ? tr(language, 'Local data could not be opened', '本机资料无法开启', 'Data tempatan tidak dapat dibuka')
+            : tr(language, 'Opening local data…', '正在读取本机资料…', 'Membuka data tempatan…')}</h1>
           {storageError && <p className="mt-3 max-w-md text-sm text-red-300">{storageError}</p>}
         </div>
       )}

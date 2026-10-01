@@ -47,6 +47,16 @@ describe('durable order mutations', () => {
     expect((await repo.read())!.state.orders).toHaveLength(1);
   });
 
+  it('continues monthly display numbers beyond the original four-digit allowance', () => {
+    const state = initial().state;
+    const earlier = createOrderMutation(state, 'Dine-in', 'A1', undefined, now, 'earlier')!.state.orders[0];
+    const fullMonth = { ...earlier, order_id: '109999' };
+    const first = createOrderMutation({ ...state, orders: [fullMonth] }, 'Dine-in', 'A1', undefined, now, 'next-1')!;
+    expect(first.state.orders[0].order_id).toBe('110000');
+    const second = createOrderMutation({ ...first.state, cart: [item] }, 'Dine-in', 'A1', undefined, now, 'next-2')!;
+    expect(second.state.orders[0].order_id).toBe('110001');
+  });
+
   it('rolls back failed order/cart transaction and permits one successful retry', async () => {
     const repo = new MemoryPosRepository(initial());
     repo.failNextWrite = new Error('quota');

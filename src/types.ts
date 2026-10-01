@@ -65,6 +65,23 @@ export type OrderType = 'Dine-in' | 'Takeaway';
 export type OrderStatus = 'Pending' | 'Preparing' | 'Completed' | 'Cancelled';
 export type PaymentMethod = 'Cash' | 'QR Pay';
 
+export interface CustomerContact {
+  name: string;
+  phone: string;
+  address: string;
+  note?: string;
+}
+
+/** Photo-free record of a menu actually issued by this shop. */
+export interface IssuedMenuRecord {
+  menuId: string;
+  createdAt: string;
+  menuItems: MenuItem[];
+  enableTax: boolean;
+  taxRate: number;
+  takeawayFee: number;
+}
+
 export interface Order {
   local_order_id: string;
   order_id: string;
@@ -86,6 +103,10 @@ export interface Order {
   paid_at?: string;
   payment_method?: PaymentMethod;
   synced: boolean;
+  customer?: CustomerContact;
+  sourceRequestId?: string;
+  sourceFingerprint?: string;
+  sourceMenuId?: string;
 }
 
 export interface DailyStat {
@@ -101,6 +122,9 @@ export interface SalesStats {
 }
 
 export interface ShopSettings {
+  shopId?: string;
+  whatsappNumber?: string;
+  issuedMenus?: IssuedMenuRecord[];
   shopNameEn: string;
   shopNameZh: string;
   shopNameMs?: string;

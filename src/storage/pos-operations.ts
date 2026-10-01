@@ -1,6 +1,7 @@
 import type { CartItem, Language, Order, OrderStatus, OrderType, PaymentMethod } from '../types';
 import { getCartItemDisplay } from '../domain/cart-item-display';
 import { calculateOrderAmounts } from '../domain/order-amounts';
+import { parseOrderRequest, rebuildRequestCart, requestFingerprint, requestMenuRevision, SharingError, type OrderRequest } from '../sharing/protocol';
 import type { PosMutation, PosState } from './pos-idb';
 
 function summary(items: CartItem[], state: PosState): string {
@@ -29,11 +30,86 @@ function nextDisplayNumber(orders: Order[], timestamp: string): string {
     .filter(order => order.timestamp.startsWith(monthText))
     .reduce((largest, order) => {
       const number = Number(order.order_id);
-      return Number.isSafeInteger(number) && number > floor && number < floor + 10000
-        ? Math.max(largest, number)
-        : largest;
+    return Number.isSafeInteger(number) && number > floor
+      ? Math.max(largest, number)
+      : largest;
     }, floor);
+  if (max === Number.MAX_SAFE_INTEGER) throw new Error('Monthly order number range is exhausted.');
   return String(max + 1);
+}
+
+export interface IncomingOrderResult { localOrderId: string; duplicate: boolean }
+
+/** Recheck an external request against issued and current menus inside the IDB write transaction. */
+export function acceptIncomingOrderMutation(
+  state: PosState,
+  input: OrderRequest,
+  expectedTotalSen: number,
+  now: Date,
+  localOrderId: string,
+  expectedMenuRevision?: string,
+): PosMutation<IncomingOrderResult> {
+  const request = parseOrderRequest(input);
+  const fingerprint = requestFingerprint(request);
+  if (!state.settings.shopId || request.shopId !== state.settings.shopId) throw new SharingError('WRONG_SHOP');
+  const duplicate = state.orders.find(order => order.sourceRequestId === request.requestId);
+  if (duplicate) {
+    if (duplicate.sourceFingerprint !== fingerprint) throw new SharingError('REQUEST_CONFLICT');
+    return { state, value: { localOrderId: duplicate.local_order_id, duplicate: true }, changed: false };
+  }
+
+  const issued = state.settings.issuedMenus?.find(menu => menu.menuId === request.menuId);
+  if (!issued) throw new SharingError('MENU_NOT_ISSUED');
+  const quotedCart = rebuildRequestCart(request, { menuItems: issued.menuItems });
+  const issuedAmounts = calculateOrderAmounts(quotedCart, {
+    ...state.settings, menuItems: issued.menuItems, enableTax: issued.enableTax,
+    taxRate: issued.taxRate, takeawayFee: issued.takeawayFee,
+  }, 'Takeaway');
+  if (Math.round(issuedAmounts.totalAmount * 100) !== request.quotedTotalSen) throw new SharingError('QUOTE_MISMATCH');
+
+  if (expectedMenuRevision !== undefined) {
+    let currentRevision: string;
+    try { currentRevision = requestMenuRevision(request, state.settings); }
+    catch (error) {
+      if (error instanceof SharingError) throw new SharingError('PRICE_CHANGED');
+      throw error;
+    }
+    if (currentRevision !== expectedMenuRevision) throw new SharingError('PRICE_CHANGED');
+  }
+
+  const cart = rebuildRequestCart(request, state.settings).map(item => {
+    const menu = state.settings.menuItems.find(candidate => candidate.id === item.menuItemId)!;
+    return { ...item,
+      sizeSelection: menu.sizes.find(choice => choice.id === item.sizeId),
+      addOnSelections: menu.addOns.filter(choice => item.addOnIds.includes(choice.id)),
+    };
+  });
+  const amounts = calculateOrderAmounts(cart, state.settings, 'Takeaway');
+  if (!Number.isSafeInteger(expectedTotalSen) || expectedTotalSen < 0 || Math.round(amounts.totalAmount * 100) !== expectedTotalSen) {
+    throw new SharingError('PRICE_CHANGED');
+  }
+  const timestamp = malaysiaTimestamp(now);
+  const order: Order = {
+    local_order_id: localOrderId,
+    order_id: nextDisplayNumber(state.orders, timestamp),
+    timestamp,
+    order_type: 'Takeaway',
+    items_summary: summary(cart, state),
+    items: cart,
+    total_qty: cart.reduce((total, item) => total + item.quantity, 0),
+    subtotal: amounts.subtotal,
+    takeaway_fee: amounts.takeawayFee,
+    tax_amount: amounts.taxAmount,
+    total_amount: amounts.totalAmount,
+    status: 'Pending',
+    paid: false,
+    synced: false,
+    customer: structuredClone(request.customer),
+    sourceRequestId: request.requestId,
+    sourceFingerprint: fingerprint,
+    sourceMenuId: request.menuId,
+  };
+  return { state: { ...state, orders: [order, ...state.orders] }, value: { localOrderId, duplicate: false } };
 }
 
 export function createOrderMutation(

@@ -35,6 +35,11 @@ export default function CashierActive() {
       <div className="flex flex-wrap justify-between gap-2"><h2 className="text-xl font-bold">{order.order_id}</h2><strong className="text-xl text-emphasis dark:text-primary">{formatCurrency(order.total_amount)}</strong></div>
       <p className="my-2 text-sm text-gray-500 dark:text-gray-400">{orderTypeLabel(language,order.order_type)}{order.table_no?' · '+tr(language,'Table','桌号','Meja')+' '+order.table_no:''} · {orderStatusLabel(language,order.status)}</p>
       <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">{order.timestamp}</p>
+      {order.customer&&<div className="mb-3 space-y-1 rounded-xl bg-amber-50 p-3 text-sm dark:bg-amber-950/30">
+        <p className="break-words font-semibold">{tr(language,'Customer','顾客','Pelanggan')}: {order.customer.name} · {order.customer.phone}</p>
+        <p className="break-words">{tr(language,'Address','地址','Alamat')}: {order.customer.address}</p>
+        {order.customer.note&&<p className="break-words">{tr(language,'Note','备注','Nota')}: {order.customer.note}</p>}
+      </div>}
       <ul className="mb-4 space-y-2">{order.items.length?order.items.map(item=>{const display=getCartItemDisplay(item,settings.menuItems.find(m=>m.id===item.menuItemId),language);return <li key={item.id}><strong>{item.quantity} × {display.itemName}</strong><p className="text-sm text-gray-500 dark:text-gray-400">{display.details.join(' • ')}</p></li>;}):<li>{order.items_summary}</li>}</ul>
       <div className="flex gap-2"><button onClick={()=>{setPayingId(order.local_order_id);setMethod(undefined);setError('');}} className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 py-3 font-bold text-white"><CreditCard size={18}/>{tr(language,'Collect payment','收款','Terima bayaran')}</button><button aria-label={tr(language,'Cancel order','取消订单','Batalkan pesanan')} onClick={async()=>{if(window.confirm(tr(language,'Cancel this order?','取消此订单？','Batalkan pesanan ini?'))&&!await updateOrderStatus(order.local_order_id,'Cancelled'))setError(tr(language,'Could not save cancellation.','取消未能保存。','Pembatalan tidak dapat disimpan.'));}} className="flex min-h-12 min-w-12 items-center justify-center rounded-xl bg-red-50 px-3 text-red-600 dark:bg-red-950/40"><XCircle size={20}/></button></div>
     </article>)}</div>
