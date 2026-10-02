@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "work.cjchan.pos.test",
+      "sha256_cert_fingerprints": [
+        "1B:E8:F5:94:66:55:6B:7C:46:69:C6:B8:87:52:14:A4:3D:47:C0:43:4B:C9:F4:A7:5F:62:D3:D5:D2:E6:DE:97"
+      ]
+    }
+  }
+]

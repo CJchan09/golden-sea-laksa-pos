@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>CJ POS — Receive order</title>
+  <style>body{margin:0;font:16px/1.6 system-ui,sans-serif;background:#fff8ed;color:#30221c}main{max-width:34rem;margin:12vh auto;padding:1.5rem}h1{font-size:1.8rem}a{display:inline-block;padding:.75rem 1.25rem;border-radius:.75rem;background:#711d2e;color:white;text-decoration:none;min-height:1.5rem}</style>
+</head>
+<body>
+  <main><h1>CJ POS</h1><p id="status">Opening order preview…</p><a id="open" href="/#/cashier/receive">Open CJ POS</a></main>
+  <script>
+    'use strict';
+    const language = navigator.language.toLowerCase().startsWith('zh') ? 'zh' : navigator.language.toLowerCase().startsWith('ms') ? 'ms' : 'en';
+    const labels = {
+      en: ['Opening order preview…', 'This order link is missing or invalid. Open CJ POS to paste a complete link or select an order file.', 'Open CJ POS'],
+      zh: ['正在打开订单预览…', '订单链接缺失或无效。打开 CJ POS 后，可粘贴完整链接或选择回单文件。', '打开 CJ POS'],
+      ms: ['Membuka pratonton pesanan…', 'Pautan pesanan hilang atau tidak sah. Buka CJ POS untuk tampal pautan lengkap atau pilih fail pesanan.', 'Buka CJ POS']
+    };
+    document.documentElement.lang = language;
+    document.getElementById('open').textContent = labels[language][2];
+    const payload = location.hash.slice(1);
+    if (location.href.length <= 8000 && /^[A-Za-z0-9_-]+$/.test(payload)) {
+      document.getElementById('status').textContent = labels[language][0];
+      // Data stays in the fragment, including after the static fallback redirect.
+      location.replace('/#/cashier/receive?payload=' + encodeURIComponent(payload));
+    } else {
+      document.getElementById('status').textContent = labels[language][1];
+    }
+  </script>
+</body>
+</html>
